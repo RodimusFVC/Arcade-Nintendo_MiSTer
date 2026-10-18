@@ -1,0 +1,75 @@
+<misterromdescription>
+    <name>Donkey Kong (Hard Kit)</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Donkey Kong</series>
+    <year>1981</year>
+    <manufacturer>Nintendo of America</manufacturer>
+    <category>Platform</category>
+
+    <setname>dkonghrd</setname>
+    <parent>dkong</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>4-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>1</num_buttons>
+    <buttons names="Fire,Not Used,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="80">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Bonus Life" bits="2,3" ids="7000,10000,15000,20000"/>
+        <dip name="Coinage" bits="4,6" ids="5C/1C,4C/1C,3C/1C,2C/1C,1C/1C,1C/2C,1C/3C,1C/4C" values="7,5,3,1,0,2,4,6"/>
+        <dip name="Cabinet" bits="7" ids="Upright,Cocktail" values="1,0"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="dkonghrd.zip|dkong.zip">
+        <part crc="a9445215" name="dk5ehard.bin"/>
+        <part crc="5ec461ec" name="c_5ct_g.bin"/>
+        <part crc="1c97d324" name="c_5bt_g.bin"/>
+        <part crc="a990729b" name="dk5ahard.bin"/>
+        <part repeat="0x4000">00</part>
+        <part crc="45a4ed06" name="s_3i_b.bin" offset="0x0" length="0x800"/>
+        <part crc="45a4ed06" name="s_3i_b.bin" offset="0x0" length="0x800"/>
+        <part crc="4743fe92" name="s_3j_b.bin"/>
+        <part repeat="0x2800">00</part>
+        <part crc="59f8054d" name="l_4m_b.bin"/>
+        <part crc="672e4714" name="l_4n_b.bin"/>
+        <part crc="feaa59ee" name="l_4r_b.bin"/>
+        <part crc="20f2ef7e" name="l_4s_b.bin"/>
+        <part repeat="0x2000">00</part>
+        <part crc="12c8c95d" name="v_5h_b.bin"/>
+        <part crc="15e9c5e9" name="v_3pt.bin"/>
+        <part repeat="0x1000">00</part>
+        <part crc="e273ede5" name="c-2k.bpr"/>
+        <part repeat="0x100">00</part>
+        <part crc="d6412358" name="c-2j.bpr"/>
+        <part repeat="0x100">00</part>
+        <part crc="b869b8f5" name="v-5e.bpr"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            00 11 00 01 00 00 00 80 FF FF 80 80 80 00 80 80
+            04 03 01 02 05 00 00 00 0C 0B 09 0A 0D 00 00 00
+            16 00 13 14 00 00 00 11 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>Donkey Kong (Hard Kit) (Nintendo Of America)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

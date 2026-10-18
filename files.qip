@@ -1,0 +1,23 @@
+set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
+
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/chip_pool_pkg.sv
+set_global_assignment -name SYSTEMVERILOG_FILE Arcade-Nintendo.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nintendo_board.sv
+
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/cpu/i8257.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/cpu/z80dma.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/rp2a03_apu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/rp2a03.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_board.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_video.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_sound.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong3_board.sv
+
+set_global_assignment -name QIP_FILE rtl/cpu/T80/T80.qip
+set_global_assignment -name QIP_FILE rtl/cpu/i8039/i8039.qip
+set_global_assignment -name QIP_FILE rtl/cpu/T65/t65.qip
+
+set_global_assignment -name VERILOG_FILE rtl/mister_custom/pause.v
+set_global_assignment -name VERILOG_FILE rtl/mister_custom/hiscore.v
+
+set_global_assignment -name VHDL_FILE rtl/ram_rom/dpram_dc.vhd

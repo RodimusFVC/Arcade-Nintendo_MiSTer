@@ -1,0 +1,71 @@
+<misterromdescription>
+    <name>Donkey Kong Junior (US, Bootleg?)</name>
+    <region>US</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Donkey Kong</series>
+    <year>1982</year>
+    <manufacturer>Nintendo of America</manufacturer>
+    <category>Platform</category>
+
+    <setname>dkongjr2</setname>
+    <parent>dkongjr</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>4-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>1</num_buttons>
+    <buttons names="Fire,Not Used,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="80">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Coinage" bits="4,6" ids="5C/1C,4C/1C,3C/1C,2C/1C,1C/1C,1C/2C,1C/3C,1C/4C" values="7,5,3,1,0,2,4,6"/>
+        <dip name="Cabinet" bits="7" ids="Upright,Cocktail" values="1,0"/>
+        <dip name="Bonus Life" bits="2,3" ids="10000,15000,20000,25000"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="dkongjr2.zip|dkongjr.zip">
+        <part crc="dc1f1d12" name="0"/>
+        <part crc="f1f286d0" name="1"/>
+        <part crc="4cb856c4" name="2"/>
+        <part repeat="0x2000">00</part>
+        <part crc="715da5f8" name="8"/>
+        <part repeat="0x3000">00</part>
+        <part crc="dc7f4164" name="v_7c.bin"/>
+        <part crc="0ce7dcf6" name="v_7d.bin"/>
+        <part crc="24d1ff17" name="v_7e.bin"/>
+        <part crc="0f8c083f" name="v_7f.bin"/>
+        <part repeat="0x2000">00</part>
+        <part crc="8d51aca9" name="9"/>
+        <part crc="4ef64ba5" name="10"/>
+        <part crc="463dc7ad" name="c-2e.bpr"/>
+        <part repeat="0x100">00</part>
+        <part crc="47ba0042" name="c-2f.bpr"/>
+        <part repeat="0x100">00</part>
+        <part crc="dbf185bf" name="v-2n.bpr"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            01 11 00 00 00 00 40 80 FF FF 80 80 80 00 80 80
+            04 03 01 02 05 00 00 00 0C 0B 09 0A 0D 00 00 00
+            16 00 13 14 00 00 00 11 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>Donkey Kong Junior (US, Bootleg?) (Nintendo Of America)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>
