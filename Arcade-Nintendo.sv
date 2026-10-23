@@ -51,6 +51,7 @@ wire        direct_video;
 wire        video_rotated;
 wire        pause_cpu;
 wire        hblank, vblank;
+wire        video_field;
 
 assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
@@ -58,7 +59,7 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 
-assign VGA_F1 = 0;
+assign VGA_F1 = video_field;   // Popeye: native 480i, the field tells the scaler / analog path which lines this is
 assign VGA_SCALER = 0;
 assign VGA_DISABLE = 0;
 assign FB_FORCE_BLANK = 0;
@@ -361,7 +362,7 @@ wire no_rotate  = ~game_vert | status[12] | direct_video;
 wire flip       = status[11];
 screen_rotate screen_rotate(.*);
 
-arcade_video #(256,24) arcade_video
+arcade_video #(512,24) arcade_video
 (
 	.*,
 
@@ -409,6 +410,7 @@ nintendo_board board
 	.video_vs(vs),
 	.video_hblank(hblank),
 	.video_vblank(vblank),
+	.video_field(video_field),
 
 	.audio(audio),
 

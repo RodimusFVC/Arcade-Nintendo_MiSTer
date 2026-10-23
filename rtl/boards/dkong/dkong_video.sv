@@ -15,6 +15,13 @@
 //  Pixel pipeline: pixel h is looked up during slot h and shown in slot h+1 (blanking / sync delayed to match).
 //  DK3 (DKC1-Video): sprite code bit 7 = attribute bit 6 (gfx2 16K, quarters 0x1000 apart), colour = 1d (R high /
 //  G low nibble) + 1c (B low nibble) into 2200-1000-470-220 darlington networks, no tri-state black.
+//  Mario Bros. (MAME mario.cpp; same raster logic per MAME, dots at 24 MHz / 4 = 6.000 MHz): the 8-clock dot slot
+//  advances on 1000 of every 1024 clocks (49.152 x 1000 / 1024 / 8 = 6.000 MHz). Tiles: Y scroll (7D00 + 17), colour
+//  from the code (MAME: 8 + code >> 5, granularity 8 -> index {bank, 1, code 7-5, 0, pen}), pen 0 from the PROM.
+//  Sprites: byte 1 = colour (3-0) / flip y (6) / flip x (7), byte 2 = code, 3 planes 0x2000 apart (bit 2 at 0x4000),
+//  halves 0x1000 apart, index {bank, colour, pen}. Sprite RAM scan = 128 entries of the bank picked by 2PSL (latch Q1;
+//  TMA1-VIDEO 7B LS157: A9 = 2PSL, A8-A0 = 128H..1/2H) as on DK; MAME draws all 256. Palette = one 512 x 8
+//  PROM (first half, Nintendo monitor) R 7-5 / G 4-2 / B 1-0 through the TKG-04 levels.
 //
 //============================================================================
 
@@ -30,6 +37,8 @@ module dkong_video
     input  logic        gfx_bank,       // DK Jr. char bank
     input  logic        gfx1_8k,        // gfx1 planes 0x1000 apart (DK Jr., DK3), else 0x800
     input  logic        dk3,            // DK3: 8-bit sprite codes, 4-bit RGB palette
+    input  logic        mario,          // Mario Bros.: 6.000 MHz dots, scroll, code colours, 3bpp sprites
+    input  logic  [7:0] scroll_y,       // Mario: 7D00 + 17 (0 elsewhere)
     input  logic        crt_flip,       // MiSTer CRT Flip: whole picture turned 180 degrees
 
     // timing out
@@ -48,7 +57,7 @@ module dkong_video
     // ROMs / PROMs
     output logic [12:0] gfx1_a,
     input  logic  [7:0] gfx1_d,
-    output logic [13:0] gfx2_a,
+    output logic [14:0] gfx2_a,
     input  logic  [7:0] gfx2_d,
     output logic  [7:0] cprom_a,        // char colour codes
     input  logic  [3:0] cprom_d,
@@ -68,12 +77,18 @@ module dkong_video
 // ------------------------------------------------------------------ timing
 logic [2:0] ph = 3'd0;
 logic [8:0] h  = 9'd0;
+
+// dot-slot enable: always on at 6.144 MHz dots, 1000 / 1024 of the clocks for Mario's 6.000 MHz
+logic [9:0] en_acc = 10'd0;
+logic       en_c;
+always_ff @(posedge clk) {en_c, en_acc} <= {1'b0, en_acc} + 11'd1000;
+wire        en = !mario || en_c;
 logic [8:0] v  = 9'd248;
 logic       hs_q = 1'b1, vblk_q = 1'b0, busy_q = 1'b0;
 
-assign ce_pix    = (ph == 3'd7);
-assign cpu_cen_p = (ph == 3'd7) && !h[0];   // h even -> odd: 1H rises
-assign cpu_cen_n = (ph == 3'd7) &&  h[0];
+assign ce_pix    = (ph == 3'd7) && en;
+assign cpu_cen_p = (ph == 3'd7) && en && !h[0];   // h even -> odd: 1H rises
+assign cpu_cen_n = (ph == 3'd7) && en &&  h[0];
 assign vram_busy = !busy_q;
 assign vblank_hw = vblk_q;
 
@@ -83,7 +98,7 @@ wire [8:0] v_nx = (v == 9'd511) ? 9'd248 : v + 9'd1;
 always_ff @(posedge clk) begin
     if (reset) begin
         ph <= 3'd0; h <= 9'd0; v <= 9'd248; hs_q <= 1'b1; vblk_q <= 1'b1; busy_q <= 1'b0;
-    end else begin
+    end else if (en) begin
         ph <= ph + 3'd1;
         if (ce_pix) begin
             h <= h_nx;
@@ -108,20 +123,20 @@ end
 // CRT Flip turns the picture 180 degrees on top of the board's own flip (same mirror the cocktail flip uses)
 wire       fl = flip ^ crt_flip;
 wire [7:0] tx = fl ? ~h[7:0] : h[7:0];
-wire [7:0] ty = fl ? ~v[7:0] : v[7:0];
+wire [7:0] ty = (fl ? ~v[7:0] : v[7:0]) + scroll_y;
 logic [7:0] code, g0;
 logic [1:0] tpix;
 logic [3:0] tcol;
-logic [5:0] spix;                       // {colour, pen} from the line buffer
+logic [6:0] spix;                       // {colour, pen} from the line buffer
 
 always_comb begin
     vram_a  = {ty[7:3], tx[7:3]};
     cprom_a = {ty[7:5], tx[7:3]};
 end
 
-always_ff @(posedge clk) begin
+always_ff @(posedge clk) if (en) begin
     case (ph)
-        3'd2: begin code <= vram_d; tcol <= cprom_d;
+        3'd2: begin code <= vram_d; tcol <= mario ? {1'b1, vram_d[7:5]} : cprom_d;
                     gfx1_a <= gfx1_8k ? {1'b0, gfx_bank, vram_d, ty[2:0]} : {2'b00, vram_d, ty[2:0]}; end
         3'd4: begin g0 <= gfx1_d;
                     gfx1_a <= gfx1_8k ? {1'b1, gfx_bank, code, ty[2:0]} : {2'b01, code, ty[2:0]}; end
@@ -131,17 +146,17 @@ always_ff @(posedge clk) begin
 end
 
 // ------------------------------------------------------------------ sprites: build line buffer during hblank
-// line buffer: 256 x 6 ({colour, pen}); display reads and clears it, the engine writes it in hblank
-logic [5:0] lbuf[256];
+// line buffer: 256 x 7 ({colour, pen}, pen 3 bits for Mario); display reads and clears it, the engine writes it in hblank
+logic [6:0] lbuf[256];
 logic [7:0] lb_wa;
-logic [5:0] lb_wd;
+logic [6:0] lb_wd;
 logic       lb_we;
-logic [5:0] lb_q;
+logic [6:0] lb_q;
 always_ff @(posedge clk) begin
     if (lb_we) lbuf[lb_wa] <= lb_wd;
-    if (ph == 3'd4 && !h[8]) begin lb_q <= lbuf[h[7:0]]; lbuf[h[7:0]] <= 6'd0; end
+    if (en && ph == 3'd4 && !h[8]) begin lb_q <= lbuf[h[7:0]]; lbuf[h[7:0]] <= 7'd0; end
 end
-always_ff @(posedge clk) if (ph == 3'd6) spix <= lb_q;
+always_ff @(posedge clk) if (en && ph == 3'd6) spix <= lb_q;
 
 // selected sprites
 logic [3:0] s_row[16];
@@ -153,10 +168,10 @@ logic [4:0] s_n;
 
 typedef enum logic [2:0] {SP_IDLE, SP_SCAN, SP_DRAW_A, SP_DRAW_P, SP_DONE} sp_t;
 sp_t        sp;
-logic [7:0] scan_i;                     // entry counter (+ 1-clock RAM latency)
+logic [8:0] scan_i;                     // entry counter (+ 1-clock RAM latency)
 logic [3:0] d_i;                        // sprite being drawn
 logic [2:0] d_rd;                       // gfx byte fetch step
-logic [7:0] d_g[4];                     // p0 left, p0 right, p1 left, p1 right
+logic [7:0] d_g[6];                     // p0 left, p0 right, p1 left, p1 right (, p2 left, p2 right: Mario)
 logic [4:0] d_px;
 logic [7:0] line;                       // MAME scanline of the line being built
 
@@ -168,45 +183,55 @@ wire [7:0] addy = fl ? 8'hF7 : 8'hF9;
 wire [7:0] sy   = spr_d[7:0] + addy + 8'd1 + vf;
 wire       hit  = sy[7:4] == 4'hF;
 wire [7:0] sx0  = spr_d[31:24] + 8'hF8;
+// entry fields: DK / DK3 byte 1 = code (+ flip y bit 7), byte 2 = colour / code bit 7 (DK3) / flip x;
+// Mario byte 1 = colour / flip y (6) / flip x (7), byte 2 = code
+wire       e_fy  = mario ? spr_d[14] : spr_d[15];
+wire       e_fx  = mario ? spr_d[15] : spr_d[23];
+wire [7:0] e_cd  = mario ? spr_d[23:16] : {spr_d[22], spr_d[14:8]};
+wire [3:0] e_col = mario ? spr_d[11:8]  : spr_d[19:16];
 wire [7:0] sx   = fl ? (sx0 ^ 8'hFF) - 8'd15 : sx0;
 
 assign spr_a  = {sprite_bank, scan_i[6:0]};
-assign gfx2_a = dk3 ? {d_rd[1:0], s_code[d_i], s_row[d_i]}                          // data one clock later
-                   : {1'b0, d_rd[1:0], s_code[d_i][6:0], s_row[d_i]};
+assign gfx2_a = mario ? {d_rd[2:0], s_code[d_i], s_row[d_i]}                         // data one clock later
+              : dk3   ? {1'b0, d_rd[1:0], s_code[d_i], s_row[d_i]}
+                      : {2'b00, d_rd[1:0], s_code[d_i][6:0], s_row[d_i]};
 
 wire [3:0] pj    = s_fx[d_i] ? 4'd15 - d_px[3:0] : d_px[3:0];
 wire [7:0] gp0   = pj[3] ? d_g[1] : d_g[0];
 wire [7:0] gp1   = pj[3] ? d_g[3] : d_g[2];
-wire [1:0] dpen  = {gp1[~pj[2:0]], gp0[~pj[2:0]]};
+wire [7:0] gp2   = pj[3] ? d_g[5] : d_g[4];
+wire [2:0] dpen  = {mario & gp2[~pj[2:0]], gp1[~pj[2:0]], gp0[~pj[2:0]]};
 
 always_ff @(posedge clk) begin
     lb_we <= 1'b0;
     if (reset) sp <= SP_IDLE;
     else case (sp)
         SP_IDLE: if (ce_pix && h_nx == 9'd256) begin
-            line <= next_line; scan_i <= 8'd0; s_n <= 5'd0; sp <= SP_SCAN;
+            line <= next_line; scan_i <= 9'd0; s_n <= 5'd0; sp <= SP_SCAN;
         end
         SP_SCAN: begin
             // spr_a = scan_i, data for scan_i - 1 this clock
-            if (scan_i != 8'd0 && s_n != 5'd16 && hit) begin
-                s_row[s_n[3:0]]  <= spr_d[15] ? 4'd15 - sy[3:0] : sy[3:0];
-                s_code[s_n[3:0]] <= {spr_d[22], spr_d[14:8]};
-                s_col[s_n[3:0]]  <= spr_d[19:16];
-                s_fx[s_n[3:0]]   <= spr_d[23] ^ fl;
+            if (scan_i != 9'd0 && s_n != 5'd16 && hit) begin
+                s_row[s_n[3:0]]  <= e_fy ? 4'd15 - sy[3:0] : sy[3:0];
+                s_code[s_n[3:0]] <= e_cd;
+                s_col[s_n[3:0]]  <= e_col;
+                s_fx[s_n[3:0]]   <= e_fx ^ fl;
                 s_x[s_n[3:0]]    <= sx;
                 s_n <= s_n + 5'd1;
             end
-            scan_i <= scan_i + 8'd1;
-            if (scan_i == 8'd128) begin d_i <= 4'd0; d_rd <= 3'd0; sp <= (s_n == 5'd0 && !hit) ? SP_DONE : SP_DRAW_A; end
+            scan_i <= scan_i + 9'd1;
+            if (scan_i == 9'd128) begin
+                d_i <= 4'd0; d_rd <= 3'd0; sp <= (s_n == 5'd0 && !hit) ? SP_DONE : SP_DRAW_A;
+            end
         end
         SP_DRAW_A: begin
-            // 4 reads: {plane, half} = 00, 01, 10, 11; data 1 clock later
+            // 4 reads (6 for Mario): {plane, half} = 00, 01, 10, 11 (, 100, 101); data 1 clock later
             if (d_rd != 3'd0) d_g[d_rd - 3'd1] <= gfx2_d;
             d_rd <= d_rd + 3'd1;
-            if (d_rd == 3'd4) begin d_px <= 5'd0; sp <= SP_DRAW_P; end
+            if (d_rd == (mario ? 3'd6 : 3'd4)) begin d_px <= 5'd0; sp <= SP_DRAW_P; end
         end
         SP_DRAW_P: begin
-            if (dpen != 2'd0) begin lb_we <= 1'b1; lb_wa <= s_x[d_i] + {4'd0, d_px[3:0]}; lb_wd <= {s_col[d_i], dpen}; end
+            if (dpen != 3'd0) begin lb_we <= 1'b1; lb_wa <= s_x[d_i] + {4'd0, d_px[3:0]}; lb_wd <= {s_col[d_i], dpen}; end
             d_px <= d_px + 5'd1;
             if (d_px == 5'd15) begin
                 d_rd <= 3'd0;
@@ -221,9 +246,13 @@ end
 
 // ------------------------------------------------------------------ colour
 // MAME tile colour: colour code + 16 * palette bank; sprites draw over tiles where their pen != 0
+// Mario: sprites {bank, colour, pen 3}, tiles {bank, 1, code 7-5, 0, pen}
+wire       s_on  = spix[2:0] != 3'd0;
+wire [7:0] pal_n = mario ? (s_on ? {palette_bank[0], spix} : {palette_bank[0], tcol, 1'b0, tpix})
+                         : (s_on ? {palette_bank, spix[6:3], spix[1:0]} : {palette_bank, tcol, tpix});
 logic [7:0] pix;
-always_ff @(posedge clk) if (ph == 3'd7) pix <= (spix[1:0] != 2'd0) ? {palette_bank, spix} : {palette_bank, tcol, tpix};
-assign pal_a = (spix[1:0] != 2'd0) ? {palette_bank, spix} : {palette_bank, tcol, tpix};
+always_ff @(posedge clk) if (en && ph == 3'd7) pix <= pal_n;
+assign pal_a = pal_n;
 
 // resistor network levels, tools/resnet.py (TKG-04: R / G 1K-470-220 + 470 pull-up, darlington; B 470-220 + 680,
 // emitter follower), scaled so the brightest red / green = 255
@@ -251,9 +280,13 @@ endfunction
 // blanking / sync delayed one slot to match the pipeline
 logic hbl_d, vbl_d, hs_d, vs_d;
 always_ff @(posedge clk) begin
-    if (ph == 3'd0) begin
+    if (en && ph == 3'd0) begin
         // PROM data for pix (addressed at ph 7) is valid now
-        if (dk3) begin
+        if (mario) begin
+            r <= lv_rg(pal_lo_d[7:5]);
+            g <= lv_rg(pal_lo_d[4:2]);
+            b <= lv_b(pal_lo_d[1:0]);
+        end else if (dk3) begin
             r <= lv4(pal_lo_d[7:4]);
             g <= lv4(pal_lo_d[3:0]);
             b <= lv4(pal_hi_d[3:0]);

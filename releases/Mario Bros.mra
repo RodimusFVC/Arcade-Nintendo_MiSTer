@@ -1,0 +1,70 @@
+<misterromdescription>
+    <name>Mario Bros.</name>
+    <region>US</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Mario Bros.</series>
+    <year>1983</year>
+    <manufacturer>Nintendo of America</manufacturer>
+    <category>Platform</category>
+
+    <setname>mario</setname>
+    <parent>mario</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>horizontal</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>2-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>1</num_buttons>
+    <buttons names="Fire,Not Used,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="00">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Coinage" bits="2,3" ids="2C/1C,1C/1C,1C/2C,1C/3C" values="1,0,2,3"/>
+        <dip name="Bonus Life" bits="4,5" ids="20k only,30k only,40k only,None"/>
+        <dip name="Difficulty" bits="6,7" ids="Easy,Medium,Hard,Hardest" values="0,2,1,3"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="mario.zip">
+        <part crc="c0c6e014" name="tma1-c-7f_e-1.7f"/>
+        <part crc="b09ab857" name="tma1-c-7e_e-3.7e"/>
+        <part crc="dcceb6c1" name="tma1-c-7d_e-1.7d"/>
+        <part crc="0d31bd1c" name="tma1-c-7c_e-3.7c"/>
+        <part repeat="0x1000">00</part>
+        <part crc="06b9ff85" name="tma1-c-6k_e.6k"/>
+        <part repeat="0x7000">00</part>
+        <part crc="28b0c42c" name="tma1-v-3f.3f"/>
+        <part crc="0c8cc04d" name="tma1-v-3j.3j"/>
+        <part crc="afc9bd41" name="tma1-c-4p.4p"/>
+        <part repeat="0x5E00">00</part>
+        <part crc="d01c0e2c" name="tma1-v.7m.7m"/>
+        <part crc="4f3a1f47" name="tma1-v-7n.7n"/>
+        <part crc="56be6ccd" name="tma1-v-7p.7p"/>
+        <part crc="ff856e6f" name="tma1-v.7s.7s"/>
+        <part crc="641f0008" name="tma1-v-7t.7t"/>
+        <part crc="d2dbeb75" name="tma1-v.7u.7u"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            04 00 00 00 00 00 FF 00 FF FF 80 80 80 00 80 80
+            04 03 00 00 05 13 14 16 0C 0B 00 00 0D 11 12 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>Mario Bros. (US, Revision E) (Nintendo Of America)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

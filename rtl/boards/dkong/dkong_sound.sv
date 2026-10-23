@@ -125,10 +125,11 @@ localparam logic signed [31:0] A_CAMP = 32'sd55923, A_AMPHP = 32'sd1930858, A_CR
 localparam logic signed [31:0] K_AMP  = -32'sd563714457;              // -8.4 / 16 (result shifted left 4)
 localparam logic signed [31:0] K_OUT  = 32'sd1287168;                 // 20112 / 2^24 in Q2.30 terms
 localparam logic signed [31:0] K_TFIDX = 32'sd332188877;              // 99 / 5 / 64
-// DK Jr. mixer (MAME dkongjr_mixer_desc): 150K fall, 100K walk, 20K climb, 47K jump, 47K DAC; C155 0.01u, C161 1u;
+// DK Jr. mixer (MAME dkongjr_mixer_desc, but R3 walk / land = 150K per DKJr.pdf p31; MAME 100K): 150K fall, 150K walk,
+// 20K climb, 47K jump, 47K DAC; C155 0.01u, C161 1u;
 // C13 coupling into 1K; 32767 / 1.18 * 0.5 per volt
-localparam logic signed [31:0] JK_S9 = 32'sd65540085, JK_S0 = 32'sd98310128, JK_S2 = 32'sd491550640, JK_S1 = 32'sd209170485;
-localparam logic signed [31:0] JA_CF = 32'sd59375367, JK_OUT = 32'sd888597;
+localparam logic signed [31:0] JK_S9 = 32'sd67603303, JK_S0 = 32'sd67603303, JK_S2 = 32'sd507024773, JK_S1 = 32'sd215755223;
+localparam logic signed [31:0] JA_CF = 32'sd57612785, JK_OUT = 32'sd888597;
 // DK Jr. discrete (verilator/dksnd/gen_jr_consts.py): 74LS624 V* = 5K pin 7, 5K pin 10, 8L, 7P (Horner D0-D4 in Q4.28
 // half cycles per sample, input targets T* pre-scaled by the 90K input, E = C_FREQ_IN rate), C24 mixer targets,
 // rcdisc_mod for Q3 (jump) / Q2 (climb), CR to 2.5 V and RC out

@@ -6,6 +6,8 @@
 //  Variant 0: Donkey Kong, TKG-04 two-board set (MAME dkong.cpp dkong2b: dkong, dkongo, dkongj..., hacks)
 //  Variant 1: Donkey Kong Jr. (MAME dkongjr)
 //  Variant 2: Donkey Kong 3 (MAME dkong3)
+//  Variant 3: Popeye, TPP2 boards (MAME popeye.cpp tpp2_state / tpp2_noalu_state)
+//  Variant 4: Mario Bros. (MAME mario.cpp mario_state)
 //
 //  ioctl index 0 (MRA), images stored as dumped; tools/gen_mra.py places MAME regions:
 //    0x00000 - 0x07FFF  maincpu  (DK3: 8000-9FFF at 0x6000)
@@ -14,6 +16,10 @@
 //    0x0C000 - 0x0FFFF  gfx2     (sprites, four quarters: 0x800 apart on DK / Jr., 0x1000 on DK3)
 //    0x10000 - 0x11FFF  gfx1     (chars, two bitplane halves)
 //    0x12000 - 0x124FF  proms    (0x000 palette A: c-2k / 1d, 0x200 palette B: c-2j / 1c, 0x400 char colour codes)
+//  Popeye: maincpu 0x00000 (32K), gfx1 0x10000 (2K), proms 0x12000 sprite palette 5B (low nibbles), 0x12100 timing
+//    PROM 7J, 0x12200 sprite palette 5A (high nibbles), 0x12400 (0x00 background 4A, 0x20 text 3A), gfx2 0x18000 (32K)
+//  Mario: maincpu 0x00000 (F000-FFFF at 0x6000), soundrom 0x08000 (4K), gfx1 0x10000 (8K), proms 0x12000 (4P, 512),
+//    gfx2 0x18000 (24K)
 //
 //============================================================================
 
@@ -48,6 +54,7 @@ module nintendo_board
     output logic        video_vs,
     output logic        video_hblank,
     output logic        video_vblank,
+    output logic        video_field,    // interlaced boards: field being shown (VGA_F1)
 
     output logic signed [15:0] audio,
 
@@ -63,27 +70,32 @@ wire load_cpu  = ioctl_wr0 && ioctl_addr[24:15] == 10'h000;        // 0x00000-0x
 wire load_snd  = ioctl_wr0 && ioctl_addr[24:13] == 12'h004;        // 0x08000-0x09FFF
 wire load_snd2 = ioctl_wr0 && ioctl_addr[24:13] == 12'h005;        // 0x0A000-0x0BFFF
 wire load_gfx2 = ioctl_wr0 && ioctl_addr[24:14] == 11'h003;        // 0x0C000-0x0FFFF
+wire load_gfx2p = ioctl_wr0 && ioctl_addr[24:15] == 10'h003;       // 0x18000-0x1FFFF (Popeye, 32K)
 wire load_gfx1 = ioctl_wr0 && ioctl_addr[24:13] == 12'h008;        // 0x10000-0x11FFF
 wire load_prom = ioctl_wr0 && ioctl_addr[24:11] == 14'h0024;       // 0x12000-0x127FF
 
 wire is_dk3 = variant == 8'd2;
+wire is_pop = variant == 8'd3;
+wire is_mar = variant == 8'd4;
 
-logic [14:0] rom_a, dk_rom_a, dk3_rom_a;
+logic [14:0] rom_a, dk_rom_a, dk3_rom_a, pop_rom_a, mar_rom_a;
 logic  [7:0] rom_d;
-logic [11:0] snd_pa;
-logic [12:0] snd_xa, dk_snd_xa, dk3_snd1_a, dk3_snd2_a;
+logic [11:0] snd_pa, dk_snd_pa, mar_snd_pa;
+logic [12:0] snd_xa, dk_snd_xa, dk3_snd1_a, dk3_snd2_a, mar_snd_xa;
+assign snd_pa = is_mar ? mar_snd_pa : dk_snd_pa;
 logic  [7:0] snd_pd, snd_xd, snd2_d;
-assign snd_xa = is_dk3 ? dk3_snd1_a : dk_snd_xa;
-logic [12:0] gfx1_a, dk_gfx1_a, dk3_gfx1_a;
-logic [13:0] gfx2_a, dk_gfx2_a, dk3_gfx2_a;
+assign snd_xa = is_dk3 ? dk3_snd1_a : is_mar ? mar_snd_xa : dk_snd_xa;
+logic [12:0] gfx1_a, dk_gfx1_a, dk3_gfx1_a, mar_gfx1_a;
+logic [10:0] pop_gfx1_a;
+logic [14:0] gfx2_a, dk_gfx2_a, dk3_gfx2_a, pop_gfx2_a, mar_gfx2_a;
 logic  [7:0] gfx1_d, gfx2_d;
-logic  [7:0] pal_a, cc_a, dk_pal_a, dk3_pal_a, dk_cc_a, dk3_cc_a;
+logic  [7:0] pal_a, cc_a, dk_pal_a, dk3_pal_a, dk_cc_a, dk3_cc_a, pop_cc_a, pop_pal_a, mar_pal_a;
 logic  [7:0] prom_lo_q, prom_hi_q, prom_cc_q;
-assign rom_a  = is_dk3 ? dk3_rom_a  : dk_rom_a;
-assign gfx1_a = is_dk3 ? dk3_gfx1_a : dk_gfx1_a;
-assign gfx2_a = is_dk3 ? dk3_gfx2_a : dk_gfx2_a;
-assign pal_a  = is_dk3 ? dk3_pal_a  : dk_pal_a;
-assign cc_a   = is_dk3 ? dk3_cc_a   : dk_cc_a;
+assign rom_a  = is_dk3 ? dk3_rom_a  : is_pop ? pop_rom_a : is_mar ? mar_rom_a : dk_rom_a;
+assign gfx1_a = is_dk3 ? dk3_gfx1_a : is_pop ? {2'b00, pop_gfx1_a} : is_mar ? mar_gfx1_a : dk_gfx1_a;
+assign gfx2_a = is_dk3 ? dk3_gfx2_a : is_pop ? pop_gfx2_a : is_mar ? mar_gfx2_a : dk_gfx2_a;
+assign pal_a  = is_dk3 ? dk3_pal_a  : is_pop ? pop_pal_a : is_mar ? mar_pal_a : dk_pal_a;
+assign cc_a   = is_dk3 ? dk3_cc_a   : is_pop ? pop_cc_a : dk_cc_a;
 
 dpram_dc #(.widthad_a(15)) rom_cpu
 (
@@ -111,9 +123,10 @@ dpram_dc #(.widthad_a(13)) rom_gfx1
     .clock_b(clk), .address_b(gfx1_a), .q_b(gfx1_d)
 );
 
-dpram_dc #(.widthad_a(14)) rom_gfx2
+dpram_dc #(.widthad_a(15)) rom_gfx2
 (
-    .clock_a(clk), .address_a(ioctl_addr[13:0]), .data_a(ioctl_dout), .wren_a(load_gfx2),
+    .clock_a(clk), .address_a(load_gfx2p ? ioctl_addr[14:0] : {1'b0, ioctl_addr[13:0]}), .data_a(ioctl_dout),
+    .wren_a(load_gfx2 | load_gfx2p),
     .clock_b(clk), .address_b(gfx2_a), .q_b(gfx2_d)
 );
 
@@ -138,9 +151,9 @@ dpram_dc #(.widthad_a(8)) prom_cc
 // One board runs at a time: each CPU is instanced once and driven by the active board (rtl/chip_pool_pkg.sv).
 
 // z80pa_0: main CPU (DK / DK Jr. at 1H, DK3 at 4 MHz)
-chip_pool_pkg::z80pa_i_t dk_z80pa_0_i, dk3_z80pa_0_i, z80pa_0_i;
+chip_pool_pkg::z80pa_i_t dk_z80pa_0_i, dk3_z80pa_0_i, pop_z80pa_0_i, mar_z80pa_0_i, z80pa_0_i;
 chip_pool_pkg::z80pa_o_t z80pa_0_o;
-assign z80pa_0_i = is_dk3 ? dk3_z80pa_0_i : dk_z80pa_0_i;
+assign z80pa_0_i = is_dk3 ? dk3_z80pa_0_i : is_pop ? pop_z80pa_0_i : is_mar ? mar_z80pa_0_i : dk_z80pa_0_i;
 
 wire [15:0] z80pa_0_a;
 wire  [7:0] z80pa_0_do;
@@ -161,9 +174,9 @@ assign z80pa_0_o.rd_n = z80pa_0_rd_n;     assign z80pa_0_o.wr_n = z80pa_0_wr_n; 
 assign z80pa_0_o.busak_n = z80pa_0_busak_n;
 
 // mcs48_0: Donkey Kong sound CPU (8035; T48 t8039_notri_extrom, Arnim Laeuger)
-chip_pool_pkg::mcs48_i_t dk_mcs48_0_i, mcs48_0_i;
+chip_pool_pkg::mcs48_i_t dk_mcs48_0_i, mar_mcs48_0_i, mcs48_0_i;
 chip_pool_pkg::mcs48_o_t mcs48_0_o;
-assign mcs48_0_i = dk_mcs48_0_i;
+assign mcs48_0_i = is_mar ? mar_mcs48_0_i : dk_mcs48_0_i;
 
 wire  [7:0] mcu_p1, mcu_p2, mcu_db;
 wire [11:0] mcu_pa;
@@ -208,36 +221,38 @@ assign t65_1_o.a = t65_1_a24[15:0];
 /////////////////////////////  Boards  /////////////////////////////
 // the board not selected is held in reset; its outputs are muxed away
 
-logic        dk_ce_pix, dk3_ce_pix;
-logic  [7:0] dk_r, dk_g, dk_b, dk3_r, dk3_g, dk3_b;
-logic        dk_hs, dk_vs, dk_hbl, dk_vbl, dk3_hs, dk3_vs, dk3_hbl, dk3_vbl;
-logic signed [15:0] dk_audio, dk3_audio;
-logic  [7:0] dk_hs_out, dk3_hs_out;
+logic        dk_ce_pix, dk3_ce_pix, pop_ce_pix, mar_ce_pix;
+logic  [7:0] dk_r, dk_g, dk_b, dk3_r, dk3_g, dk3_b, pop_r, pop_g, pop_b, mar_r, mar_g, mar_b;
+logic        dk_hs, dk_vs, dk_hbl, dk_vbl, dk3_hs, dk3_vs, dk3_hbl, dk3_vbl, pop_hs, pop_vs, pop_hbl, pop_vbl, pop_fld;
+logic        mar_hs, mar_vs, mar_hbl, mar_vbl;
+logic signed [15:0] dk_audio, dk3_audio, pop_audio, mar_audio;
+logic  [7:0] dk_hs_out, dk3_hs_out, pop_hs_out, mar_hs_out;
 
-assign ce_pix       = is_dk3 ? dk3_ce_pix : dk_ce_pix;
-assign video_r      = is_dk3 ? dk3_r   : dk_r;
-assign video_g      = is_dk3 ? dk3_g   : dk_g;
-assign video_b      = is_dk3 ? dk3_b   : dk_b;
-assign video_hs     = is_dk3 ? dk3_hs  : dk_hs;
-assign video_vs     = is_dk3 ? dk3_vs  : dk_vs;
-assign video_hblank = is_dk3 ? dk3_hbl : dk_hbl;
-assign video_vblank = is_dk3 ? dk3_vbl : dk_vbl;
-assign audio        = is_dk3 ? dk3_audio : dk_audio;
-assign hs_data_out  = is_dk3 ? dk3_hs_out : dk_hs_out;
+assign ce_pix       = is_dk3 ? dk3_ce_pix : is_pop ? pop_ce_pix : is_mar ? mar_ce_pix : dk_ce_pix;
+assign video_r      = is_dk3 ? dk3_r   : is_pop ? pop_r   : is_mar ? mar_r   : dk_r;
+assign video_g      = is_dk3 ? dk3_g   : is_pop ? pop_g   : is_mar ? mar_g   : dk_g;
+assign video_b      = is_dk3 ? dk3_b   : is_pop ? pop_b   : is_mar ? mar_b   : dk_b;
+assign video_hs     = is_dk3 ? dk3_hs  : is_pop ? pop_hs  : is_mar ? mar_hs  : dk_hs;
+assign video_vs     = is_dk3 ? dk3_vs  : is_pop ? pop_vs  : is_mar ? mar_vs  : dk_vs;
+assign video_hblank = is_dk3 ? dk3_hbl : is_pop ? pop_hbl : is_mar ? mar_hbl : dk_hbl;
+assign video_vblank = is_dk3 ? dk3_vbl : is_pop ? pop_vbl : is_mar ? mar_vbl : dk_vbl;
+assign video_field  = is_pop & pop_fld;
+assign audio        = is_dk3 ? dk3_audio : is_pop ? pop_audio : is_mar ? mar_audio : dk_audio;
+assign hs_data_out  = is_dk3 ? dk3_hs_out : is_pop ? pop_hs_out : is_mar ? mar_hs_out : dk_hs_out;
 
 // Donkey Kong (TKG-04) / Donkey Kong Jr.
 dkong_board dkong
 (
-    .clk(clk), .reset(reset | is_dk3), .pause(pause), .crt_flip(crt_flip), .jr(variant == 8'd1),
+    .clk(clk), .reset(reset | is_dk3 | is_pop | is_mar), .pause(pause), .crt_flip(crt_flip), .jr(variant == 8'd1),
     .z80pa_0_i(dk_z80pa_0_i), .z80pa_0_o(z80pa_0_o), .mcs48_0_i(dk_mcs48_0_i), .mcs48_0_o(mcs48_0_o),
     .in0(in0), .in1(in1), .in2(in2), .dsw0(dsw0), .in2_snd_status(game_flags2[0]),
-    .rom_a(dk_rom_a), .rom_d(rom_d), .snd_pa(snd_pa), .snd_pd(snd_pd), .snd_xa(dk_snd_xa), .snd_xd(snd_xd),
+    .rom_a(dk_rom_a), .rom_d(rom_d), .snd_pa(dk_snd_pa), .snd_pd(snd_pd), .snd_xa(dk_snd_xa), .snd_xd(snd_xd),
     .gfx1_a(dk_gfx1_a), .gfx1_d(gfx1_d), .gfx2_a(dk_gfx2_a), .gfx2_d(gfx2_d),
     .pal_a(dk_pal_a), .prom_lo_d(prom_lo_q), .prom_hi_d(prom_hi_q), .cc_a(dk_cc_a), .prom_cc_d(prom_cc_q[3:0]),
     .ce_pix(dk_ce_pix), .video_r(dk_r), .video_g(dk_g), .video_b(dk_b),
     .video_hs(dk_hs), .video_vs(dk_vs), .video_hblank(dk_hbl), .video_vblank(dk_vbl),
     .audio(dk_audio),
-    .hs_address(hs_address), .hs_data_in(hs_data_in), .hs_data_out(dk_hs_out), .hs_write(hs_write & ~is_dk3)
+    .hs_address(hs_address), .hs_data_in(hs_data_in), .hs_data_out(dk_hs_out), .hs_write(hs_write & ~is_dk3 & ~is_pop & ~is_mar)
 );
 
 // Donkey Kong 3 (DKC1)
@@ -254,6 +269,35 @@ dkong3_board dkong3
     .video_hs(dk3_hs), .video_vs(dk3_vs), .video_hblank(dk3_hbl), .video_vblank(dk3_vbl),
     .audio(dk3_audio),
     .hs_address(hs_address), .hs_data_in(hs_data_in), .hs_data_out(dk3_hs_out), .hs_write(hs_write & is_dk3)
+);
+
+// Popeye (TPP2-CPU / TPP2-VIDEO)
+popeye_board popeye
+(
+    .clk(clk), .reset(reset | ~is_pop), .pause(pause), .crt_flip(crt_flip),
+    .z80pa_0_i(pop_z80pa_0_i), .z80pa_0_o(z80pa_0_o),
+    .in0(in0), .in1(in1), .in2(in2), .dsw0(dsw0), .dsw1(dsw1),
+    .rom_a(pop_rom_a), .rom_d(rom_d), .gfx1_a(pop_gfx1_a), .gfx1_d(gfx1_d), .prom_a(pop_cc_a), .prom_d(prom_cc_q),
+    .gfx2_a(pop_gfx2_a), .gfx2_d(gfx2_d), .spal_a(pop_pal_a), .spal_lo(prom_lo_q[3:0]), .spal_hi(prom_hi_q[3:0]),
+    .ce_pix(pop_ce_pix), .video_r(pop_r), .video_g(pop_g), .video_b(pop_b),
+    .video_hs(pop_hs), .video_vs(pop_vs), .video_hblank(pop_hbl), .video_vblank(pop_vbl), .video_field(pop_fld),
+    .audio(pop_audio),
+    .hs_address(hs_address), .hs_data_in(hs_data_in), .hs_data_out(pop_hs_out), .hs_write(hs_write & is_pop)
+);
+
+// Mario Bros. (TMA1-CPU / TMA1-VIDEO)
+mario_board mario
+(
+    .clk(clk), .reset(reset | ~is_mar), .pause(pause), .crt_flip(crt_flip),
+    .z80pa_0_i(mar_z80pa_0_i), .z80pa_0_o(z80pa_0_o), .mcs48_0_i(mar_mcs48_0_i), .mcs48_0_o(mcs48_0_o),
+    .in0(in0), .in1(in1), .dsw0(dsw0),
+    .snd_pa(mar_snd_pa), .snd_pd(snd_pd), .snd_xa(mar_snd_xa), .snd_xd(snd_xd),
+    .rom_a(mar_rom_a), .rom_d(rom_d), .gfx1_a(mar_gfx1_a), .gfx1_d(gfx1_d), .gfx2_a(mar_gfx2_a), .gfx2_d(gfx2_d),
+    .pal_a(mar_pal_a), .prom_d(prom_lo_q),
+    .ce_pix(mar_ce_pix), .video_r(mar_r), .video_g(mar_g), .video_b(mar_b),
+    .video_hs(mar_hs), .video_vs(mar_vs), .video_hblank(mar_hbl), .video_vblank(mar_vbl),
+    .audio(mar_audio),
+    .hs_address(hs_address), .hs_data_in(hs_data_in), .hs_data_out(mar_hs_out), .hs_write(hs_write & is_mar)
 );
 
 endmodule

@@ -45,7 +45,7 @@ module dkong_board
     input  logic  [7:0] snd_xd,
     output logic [12:0] gfx1_a,
     input  logic  [7:0] gfx1_d,
-    output logic [13:0] gfx2_a,
+    output logic [14:0] gfx2_a,
     input  logic  [7:0] gfx2_d,
     output logic  [7:0] pal_a,          // MAME proms 0x000 c-2k, 0x100 c-2j (same address), 0x200 v-5e
     input  logic  [7:0] prom_lo_d,      // c-2k[pal_a]
@@ -230,7 +230,7 @@ assign z80pa_0_i.busrq_n = ~dma_hrq;
 dkong_video video
 (
     .clk(clk), .reset(reset),
-    .flip(flip), .sprite_bank(spr_bank), .palette_bank(pal_bank), .gfx_bank(jr & lat_4h[0]), .gfx1_8k(jr), .dk3(1'b0), .crt_flip(crt_flip),
+    .flip(flip), .sprite_bank(spr_bank), .palette_bank(pal_bank), .gfx_bank(jr & lat_4h[0]), .gfx1_8k(jr), .dk3(1'b0), .mario(1'b0), .scroll_y(8'd0), .crt_flip(crt_flip),
     .ce_pix(ce_pix), .cpu_cen_p(cen_p), .cpu_cen_n(cen_n), .vram_busy(vram_busy), .vblank_hw(vblk),
     .vram_a(vram_va), .vram_d(vram_vd), .spr_a(spr_a), .spr_d(spr_d),
     .gfx1_a(gfx1_a), .gfx1_d(gfx1_d), .gfx2_a(gfx2_a), .gfx2_d(gfx2_d),
