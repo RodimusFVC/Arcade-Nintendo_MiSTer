@@ -18,6 +18,9 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/popeye/popeye_sound.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/mario/mario_board.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/mario/mario_sound.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/mario/mario_discrete.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_board.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_video.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_sound.sv
 
 set_global_assignment -name QIP_FILE rtl/cpu/T80/T80.qip
 set_global_assignment -name QIP_FILE rtl/cpu/i8039/i8039.qip

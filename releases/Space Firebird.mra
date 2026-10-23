@@ -1,0 +1,70 @@
+<misterromdescription>
+    <name>Space Firebird</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Space Firebird</series>
+    <year>1980</year>
+    <manufacturer>Nintendo</manufacturer>
+    <category>Shooter</category>
+
+    <setname>spacefb</setname>
+    <parent>spacefb</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>2-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>2</num_buttons>
+    <buttons names="Fire,Button 2,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="20">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Coinage" bits="2,3" ids="3C/1C,2C/1C,1C/1C,1C/2C" values="2,1,0,3"/>
+        <dip name="Bonus Life" bits="4" ids="5000,8000"/>
+        <dip name="Cabinet" bits="5" ids="Upright,Cocktail" values="1,0"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="spacefb.zip">
+        <part crc="79c3527e" name="tst-c-u.5e"/>
+        <part crc="c0973965" name="tst-c-u.5f"/>
+        <part crc="02c60ec5" name="tst-c-u.5h"/>
+        <part crc="76fd18c7" name="tst-c-u.5i"/>
+        <part crc="df52c97c" name="tst-c-u.5j"/>
+        <part crc="1713300c" name="tst-c-u.5k"/>
+        <part crc="6286f534" name="tst-c-u.5m"/>
+        <part crc="1c9f91ee" name="tst-c-u.5n"/>
+        <part repeat="0x4000">00</part>
+        <part crc="1c8670b3" name="ic20.snd"/>
+        <part repeat="0x3C00">00</part>
+        <part crc="236e1ff7" name="tst-v-a.5k"/>
+        <part crc="bf901a4e" name="tst-v-a.6k"/>
+        <part repeat="0x3000">00</part>
+        <part crc="528e8533" name="4i.vid"/>
+        <part repeat="0x1F00">00</part>
+        <part crc="465d07af" name="mb7051.3n"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            05 10 00 00 00 00 00 20 FF FF 80 80 80 00 80 80
+            04 03 00 00 06 00 00 05 0C 0B 00 00 0E 00 00 0D
+            00 00 13 14 00 00 16 11 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>Space Firebird (Rev. 04-U) (Nintendo)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>
