@@ -10,6 +10,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/rp2a03_apu.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/rp2a03.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_board.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_video.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_radar.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_sound.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong3_board.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/popeye/popeye_board.sv
@@ -21,6 +22,9 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/mario/mario_discrete.s
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_board.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_video.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_sound.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/n8080/n8080_board.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/n8080/n8080_sound.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/sn76477.sv
 
 set_global_assignment -name QIP_FILE rtl/cpu/T80/T80.qip
 set_global_assignment -name QIP_FILE rtl/cpu/i8039/i8039.qip

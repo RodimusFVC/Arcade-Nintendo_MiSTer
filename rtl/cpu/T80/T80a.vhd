@@ -168,7 +168,7 @@ begin
 
 	u0 : T80
 		generic map(
-			Mode => Mode,
+			Mode_g => Mode,
 			IOWait => IOWait)
 		port map(
 			R800_mode => R800_mode,

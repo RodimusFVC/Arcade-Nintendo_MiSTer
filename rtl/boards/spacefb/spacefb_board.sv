@@ -53,6 +53,9 @@ module spacefb_board
     output logic        video_vblank,
 
     output logic signed [15:0] audio,
+    output logic signed [39:0] mul_a,   // MULPOOL-2026-10-23: shared multiplier (rtl/nintendo_board.sv)
+    output logic signed [26:0] mul_b,
+    input  logic signed [66:0] mul_p,
 
     input  logic [15:0] hs_address,
     input  logic  [7:0] hs_data_in,
@@ -195,7 +198,7 @@ spacefb_sound sound
 (
     .clk(clk), .reset(reset), .pause(pause),
     .mcs48_0_i(mcs48_0_i), .mcs48_0_o(mcs48_0_o),
-    .port1(port1), .v2(v2), .pa(snd_pa), .pd(snd_pd), .audio(audio)
+    .port1(port1), .v2(v2), .pa(snd_pa), .pd(snd_pd), .audio(audio), .mul_a(mul_a), .mul_b(mul_b), .mul_p(mul_p)
 );
 
 endmodule

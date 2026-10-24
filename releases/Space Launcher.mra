@@ -1,0 +1,67 @@
+<misterromdescription>
+    <name>Space Launcher</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Space Fever</series>
+    <year>1979</year>
+    <manufacturer>Nintendo</manufacturer>
+    <category>Shooter</category>
+
+    <setname>spacelnc</setname>
+    <parent>spacelnc</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>2-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>4</num_buttons>
+    <buttons names="Fire,Game A,Game B,Game C,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="F0">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Bonus Life" bits="2,3" ids="1000,3000,5000,8000"/>
+        <dip name="Unused" bits="4" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="5" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="6" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="7" ids="Off,On" values="1,0"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="spacelnc.zip">
+        <part crc="6ad59e40" name="sl.f1"/>
+        <part crc="2de568e2" name="sl.f2"/>
+        <part crc="06d0ab36" name="sl.g1"/>
+        <part crc="73ac4fe6" name="sl.g2"/>
+        <part crc="7f42a94b" name="sl.h1"/>
+        <part crc="04b7a5f9" name="sl.h2"/>
+        <part crc="d30007a3" name="sl.i1"/>
+        <part crc="640ffd2f" name="sl.i2"/>
+        <part repeat="0x6000">00</part>
+        <part crc="8e1ff929" name="sl.snd"/>
+        <part repeat="0x7C00">00</part>
+        <part crc="c5914ec1" name="sf.prm"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            08 10 00 00 00 00 F0 00 FF FF 80 80 00 80 80 80
+            05 03 04 13 14 00 00 11 0D 0B 0C 06 07 08 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>Space Launcher (Nintendo)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

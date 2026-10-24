@@ -1,0 +1,64 @@
+<misterromdescription>
+    <name>Sheriff</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Sheriff</series>
+    <year>1979</year>
+    <manufacturer>Nintendo</manufacturer>
+    <category>Shooter</category>
+
+    <setname>sheriff</setname>
+    <parent>sheriff</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>8-way</joystick>
+    <special_controls>twin stick</special_controls>
+    <num_buttons>6</num_buttons>
+    <buttons names="Fire,Not Used,R Right,R Left,Coin,Start 1P,Start 2P,Pause,R Down,R Up,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="FC">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Cabinet" bits="7" ids="Upright,Cocktail" values="1,0"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="sheriff.zip">
+        <part crc="e79df6e8" name="sh.f1"/>
+        <part crc="da67721a" name="sh.f2"/>
+        <part crc="3fb7888e" name="sh.g1"/>
+        <part crc="585fcfee" name="sh.g2"/>
+        <part crc="e59eab52" name="sh.h1"/>
+        <part crc="79e69a6a" name="sh.h2"/>
+        <part crc="dda7d1e8" name="sh.i1"/>
+        <part crc="5c5f3f86" name="sh.i2"/>
+        <part crc="0aa8b79a" name="sh.j1"/>
+        <part repeat="0x5C00">00</part>
+        <part crc="75731745" name="sh.snd"/>
+        <part repeat="0x7C00">00</part>
+        <part crc="820f8cdd" name="82s137.3l"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            09 10 00 00 00 00 00 FC FF FF 80 80 80 00 80 80
+            04 03 01 02 26 27 29 28 0C 0B 09 0A 2A 2B 2D 2C
+            05 0D 13 14 00 00 00 11 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>Sheriff (Nintendo)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

@@ -73,7 +73,7 @@ use IEEE.numeric_std.all;
 
 entity T80_ALU is
 	generic(
-		Mode : integer := 0;
+		Mode_g : integer := 0;
 		Flag_C : integer := 0;
 		Flag_N : integer := 1;
 		Flag_P : integer := 2;
@@ -84,6 +84,7 @@ entity T80_ALU is
 		Flag_S : integer := 7
 	);
 	port(
+		I8080  : in  std_logic := '0';  -- runtime 8080 mode (on a Mode_g = 0 build: Mode = 2 while high)
 		Arith16         : in  std_logic;
 		Z16             : in  std_logic;
 		WZ              : in  std_logic_vector(15 downto 0);
@@ -101,6 +102,8 @@ entity T80_ALU is
 end T80_ALU;
 
 architecture rtl of T80_ALU is
+
+	signal Mode : integer range 0 to 3;   -- Mode_g, or 2 (8080) while I8080 = 1 on a Mode_g = 0 build
 
 	procedure AddSub(A        : std_logic_vector;
 					 B        : std_logic_vector;
@@ -134,6 +137,7 @@ architecture rtl of T80_ALU is
 	signal BitMask                 : std_logic_vector(7 downto 0);
 
 begin
+	Mode <= 2 when I8080 = '1' and Mode_g = 0 else Mode_g;
 
 	with IR(5 downto 3) select BitMask <= "00000001" when "000",
 										  "00000010" when "001",
@@ -150,7 +154,7 @@ begin
 	AddSub(BusA(7 downto 7), BusB(7 downto 7), ALU_Op(1), Carry7_v, Q_v(7 downto 7), Carry_v);
 
 	-- bug fix - parity flag is just parity for 8080, also overflow for Z80
-	process (Carry_v, Carry7_v, Q_v)
+	process (Carry_v, Carry7_v, Q_v, Mode)
 	begin
 		if(Mode=2) then
 			OverFlow_v <= not (Q_v(0) xor Q_v(1) xor Q_v(2) xor Q_v(3) xor
@@ -159,7 +163,7 @@ begin
 		end if;
 	end process;
 
-	process (Arith16, ALU_OP, F_In, BusA, BusB, IR, Q_v, Carry_v, HalfCarry_v, OverFlow_v, BitMask, ISet, Z16, Rot_Akku, WZ, XY_State)
+	process (Arith16, ALU_OP, F_In, BusA, BusB, IR, Q_v, Carry_v, HalfCarry_v, OverFlow_v, BitMask, ISet, Z16, Rot_Akku, WZ, XY_State, Mode)
 		variable Q_t : std_logic_vector(7 downto 0);
 		variable DAA_Q : unsigned(8 downto 0);
 	begin

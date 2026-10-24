@@ -14,6 +14,14 @@
 //    -> mix (4 x 47K, C159 100n, C12 1u) -> Q3 amp -> output coupling. MAME's model except: emitter followers are
 //    ideal (charge to Vb - 0.7), 555s flip at the sample, Q3 = linear -8.4 x with the 0-5 V swing (MAME's 48 kHz
 //    transistor step rolls off the treble: gain 2.3 at 3 kHz vs 8.4 in its own model at 768 kHz).
+//  Radar Scope (rs, TRS2-03 / 04-SOU sheet, Radar_Scope_Schematics.pdf p11; network as MAME radarscp_discrete with the
+//    sheet's values where MAME differs: SOUND0 C22 load 10K, R27 10K, R9 10K, CV networks R55 / R60 at the mid node;
+//    model: dksnd/radarscp_discrete.py, constants: dksnd/gen_rs_consts.py, in the verilator dir): same
+//    8035 / DAC (VR2 0.35); SOUND2 / SOUND1 (6H Q2 / Q1) = the stomp form on noise QC / QB of a 4-bit LS161 cleared
+//    while 6H Q6 is low; SOUND0 (Q0) = the walk form with a resistor CV mixer and its 555 enabled by Q6; SOUND7 (Q7,
+//    the game-start siren) = CD4049 LFO -> 555 VCO (enabled by Q7) gating a slow CD4049 sine through R46 / C45;
+//    mix 5 x 10K into VR2 10K, C2, the DK Q3 amp form, output CR 1K / 33u, MAME route gain 0.7. Own sequencer block
+//    and multiplier (same 256-step sample).
 //
 //============================================================================
 
@@ -23,6 +31,7 @@ module dkong_sound
     input  logic        reset,
     input  logic        pause,
     input  logic        jr,             // DK Jr.: LS174 latch on MOVX, P2.4-6 inputs, own discrete board
+    input  logic        rs,             // Radar Scope (TRS-02) discrete board
 
     output chip_pool_pkg::mcs48_i_t mcs48_0_i,
     input  chip_pool_pkg::mcs48_o_t mcs48_0_o,
@@ -134,6 +143,9 @@ localparam logic signed [31:0] JA_CF = 32'sd57612785, JK_OUT = 32'sd888597;
 // half cycles per sample, input targets T* pre-scaled by the 90K input, E = C_FREQ_IN rate), C24 mixer targets,
 // rcdisc_mod for Q3 (jump) / Q2 (climb), CR to 2.5 V and RC out
 localparam logic signed [31:0] V0_2 = 32'sd3355443, V4_9 = 32'sd82208358, V2_5 = 32'sd41943040, HALF = 32'sd268435456;
+// DK Jr. land thump (walk circuit with 7D07 set): swing cut to 1/3 (-9.5 dB) around the 4.9 V idle level -- user trim
+// 2026-10-23 ("way too loud" on HW with the schematic's R3 150K); walking keeps the full 0.2 V low
+localparam logic signed [31:0] V_LAND = 32'sd55924053;               // 4.9 - (4.9 - 0.2) / 3 V
 localparam logic signed [31:0] VA_D0    = 32'sd10526684;   // 0.0392149522
 localparam logic signed [31:0] VA_D1    = -32'sd5925939;   // -0.0220758415
 localparam logic signed [31:0] VA_D2    = 32'sd8333921;   // 0.0310462733
@@ -200,6 +212,92 @@ localparam logic signed [31:0] JJ_CR    = 32'sd253135;   // 0.000235750085
 localparam logic signed [31:0] JC_CR    = 32'sd594772;   // 0.000553924541
 localparam logic signed [31:0] JJ_RC    = 32'sd650118220;   // 0.605469774
 localparam logic signed [31:0] JC_RC    = 32'sd45606494;   // 0.0424743577
+
+// Radar Scope (verilator/dksnd/gen_rs_consts.py; TRS2-03 / 04-SOU sheet values, see radarscp_discrete.py for MAME's)
+localparam logic signed [31:0] RS2_AL0   = 32'sd559095;
+localparam logic signed [31:0] RS2_TG0   = 32'sd20132659;
+localparam logic signed [31:0] RS2_G0    = 32'sd536870912;
+localparam logic signed [31:0] RS2_AL1   = 32'sd1067867614;
+localparam logic signed [31:0] RS2_TG1   = 32'sd10067336;
+localparam logic signed [31:0] RS2_G1    = 32'sd1073634461;
+localparam logic signed [31:0] RS2_AH0   = 32'sd279584;
+localparam logic signed [31:0] RS2_TV0   = -32'sd20132659;
+localparam logic signed [31:0] RS2_AH1   = 32'sd559039;
+localparam logic signed [31:0] RS2_TV1   = -32'sd10067336;
+localparam logic signed [31:0] RS2_AH2   = 32'sd279584;
+localparam logic signed [31:0] RS2_TV2   = -32'sd20132659;
+localparam logic signed [31:0] RS2_AH3   = 32'sd559039;
+localparam logic signed [31:0] RS2_TV3   = -32'sd10067336;
+localparam logic signed [31:0] RS1_AL0   = 32'sd559095;
+localparam logic signed [31:0] RS1_TG0   = 32'sd20132659;
+localparam logic signed [31:0] RS1_G0    = 32'sd536870912;
+localparam logic signed [31:0] RS1_AL1   = 32'sd1067867614;
+localparam logic signed [31:0] RS1_TG1   = 32'sd10067336;
+localparam logic signed [31:0] RS1_G1    = 32'sd1073634461;
+localparam logic signed [31:0] RS1_AH0   = 32'sd279584;
+localparam logic signed [31:0] RS1_TV0   = -32'sd20132659;
+localparam logic signed [31:0] RS1_AH1   = 32'sd559039;
+localparam logic signed [31:0] RS1_TV1   = -32'sd10067336;
+localparam logic signed [31:0] RS1_AH2   = 32'sd279584;
+localparam logic signed [31:0] RS1_TV2   = -32'sd20132659;
+localparam logic signed [31:0] RS1_AH3   = 32'sd559039;
+localparam logic signed [31:0] RS1_TV3   = -32'sd10067336;
+localparam logic signed [31:0] RS0_AL0   = 32'sd20875;
+localparam logic signed [31:0] RS0_TG0   = 32'sd15804137;
+localparam logic signed [31:0] RS0_G0    = 32'sd683911990;
+localparam logic signed [31:0] RS0_AL1   = 32'sd25316;
+localparam logic signed [31:0] RS0_TG1   = 32'sd14797505;
+localparam logic signed [31:0] RS0_G1    = 32'sd730436615;
+localparam logic signed [31:0] RS0_AH0   = 32'sd7579;
+localparam logic signed [31:0] RS0_TV0   = -32'sd15804137;
+localparam logic signed [31:0] RS0_AH1   = 32'sd8094;
+localparam logic signed [31:0] RS0_TV1   = -32'sd14797505;
+localparam logic signed [31:0] RS0_AH2   = 32'sd18003;
+localparam logic signed [31:0] RS0_TV2   = -32'sd73182216;
+localparam logic signed [31:0] RS0_AH3   = 32'sd21213;
+localparam logic signed [31:0] RS0_TV3   = -32'sd62109254;
+localparam logic signed [31:0] RS2_A20   = 32'sd2311;
+localparam logic signed [31:0] RS2_A21   = 32'sd25420;
+localparam logic signed [31:0] RS1_A20   = 32'sd5084;
+localparam logic signed [31:0] RS1_A21   = 32'sd55923;
+localparam logic signed [31:0] RS2_RG12  = 32'sd848668040;
+localparam logic signed [31:0] RS2_RA0   = 32'sd7430710;
+localparam logic signed [31:0] RS2_RA1   = 32'sd1561875;
+localparam logic signed [31:0] RS1_RG12  = 32'sd1030612081;
+localparam logic signed [31:0] RS1_RA0   = 32'sd36642860;
+localparam logic signed [31:0] RS1_RA1   = 32'sd1496517;
+localparam logic signed [31:0] RS7_RG12  = 32'sd536870912;
+localparam logic signed [31:0] RS7_RA0   = 32'sd254170;
+localparam logic signed [31:0] RS7_RA1   = 32'sd127093;
+localparam logic signed [31:0] RS0_IW    = 32'sd394037;
+localparam logic signed [31:0] RS0_IWC   = 32'sd433432;
+localparam logic signed [31:0] RS0_IR    = 32'sd976128931;
+localparam logic signed [31:0] RS7A_IW   = 32'sd2792565;
+localparam logic signed [31:0] RS7A_IWC  = 32'sd3071422;
+localparam logic signed [31:0] RS7A_IR   = 32'sd976128931;
+localparam logic signed [31:0] RS7B_IW   = 32'sd14122;
+localparam logic signed [31:0] RS7B_IWC  = 32'sd14199;
+localparam logic signed [31:0] RS7B_IR   = 32'sd1067916823;
+localparam logic signed [31:0] RS0_CA    = 32'sd37260079;
+localparam logic signed [31:0] RS0_CB    = 32'sd162885592;
+localparam logic signed [31:0] RS0_CE    = 32'sd762793;
+localparam logic signed [31:0] RS0_5C    = 32'sd7530772;
+localparam logic signed [31:0] RS0_5D    = 32'sd20514116;
+localparam logic signed [31:0] RS0_CR    = 32'sd106233;
+localparam logic signed [31:0] RS7_CA    = 32'sd15935442;
+localparam logic signed [31:0] RS7_CB    = 32'sd757928272;
+localparam logic signed [31:0] RS7_CE    = 32'sd1782706;
+localparam logic signed [31:0] RS7_5C    = 32'sd2287652;
+localparam logic signed [31:0] RS7_5D    = 32'sd6258240;
+localparam logic signed [31:0] RS7_CR    = 32'sd621199;
+localparam logic signed [31:0] RS0_OUT   = 32'sd536870912;   // R15 / (R15 + R16)
+localparam logic signed [31:0] RS7_OUT   = 32'sd465288124;   // R44 / (R43 + R44)
+localparam logic signed [31:0] RS2_OUT   = 32'sd771279338;   // R3 / (R3 + R4)
+localparam logic signed [31:0] RS1_OUT   = 32'sd362654523;   // R26 / (R26 + R27), R27 10K (sheet)
+localparam logic signed [31:0] RS_MIX    = 32'sd178956971;   // 5 x 10K into VR2 10K
+localparam logic signed [31:0] RS_CRO    = 32'sd169453;   // output CR 1K / 33u
+localparam logic signed [31:0] RS_VR2    = 32'sd375809638;   // MAME VR2 default 35
+localparam logic signed [31:0] RS_OUT    = 32'sd880777;   // 32767 / 5 x 3 x 0.7 (MAME route) / 2^24 in Q2.30 terms
 
 // CD4049 transfer (MAME dss_inverter_osc tftab, DEFAULT_CD40XX_VALUES(5)), 100 entries over 0-5 V: tf_tab below
 
@@ -353,6 +451,8 @@ logic        [16:0] j_lfsr, jl;
 logic        [17:0] j_lacc;
 logic        [15:0] os_walk, os_jump, os_climb;
 logic               os_walk_on, os_jump_on, os_climb_on, os_walk_l, os_jump_l, os_climb_l;
+logic         [3:0] rcnt;                                              // Radar Scope 3J (4 bits, cleared by 6H Q6 low)
+logic signed [31:0] t_dac;                                             // DAC x VR2 (slot 69)
 
 // LS123 one-shot step (MAME dst_oneshot, retriggerable, rising edge; widths in samples) -> {count, on, last trigger}
 function automatic logic [17:0] os_next(input logic [15:0] cnt, input logic on, input logic last, input logic trig,
@@ -389,7 +489,7 @@ always_ff @(posedge clk) begin
         va_ff <= 0; vb_ff <= 0; vc_ff <= 0; vd_ff <= 0; j_n106 <= 0; j_n107 <= 0; j_lout <= 1'b1;
         j_cnt <= 0; j_lfsr <= 0; j_lacc <= 0; os_walk <= 0; os_jump <= 0; os_climb <= 0;
         os_walk_on <= 0; os_jump_on <= 0; os_climb_on <= 0; os_walk_l <= 0; os_jump_l <= 0; os_climb_l <= 0;
-        jr_s0 <= V4_9; jr_s1 <= 0; jr_s2 <= 0; jr_s9 <= V4_9;
+        jr_s0 <= V4_9; jr_s1 <= 0; jr_s2 <= 0; jr_s9 <= V4_9; rcnt <= 4'd0; t_dac <= 0;
     end else if (!pause) begin
         case (st)
             // ---------------------------------------------------------- noise, stomp (6H Q2)
@@ -399,9 +499,10 @@ always_ff @(posedge clk) begin
                     l = {1'b0, lfsr[22:0], ~lfsr[24]};
                     l[24] = l[10] ^ l[23];
                     lfsr <= l;
-                    if (l[24] && !nout) ncnt <= ncnt + 3'd1;
+                    if (l[24] && !nout) begin ncnt <= ncnt + 3'd1; rcnt <= rcnt + 4'd1; end
                     nout <= l[24];
                 end else lfsr_acc <= lfsr_acc + 18'd4000;
+                if (!sfx[6]) rcnt <= 4'd0;
                 // rcdisc_mod (in2 = 0)
                 t_m1 <= s2i;
                 u_n = s2i ? 32'sd0 : V5;
@@ -575,7 +676,7 @@ always_ff @(posedge clk) begin
             8'd67: begin
                 t_y0 <= t_y0 - mq;
                 x2 <= x1; x1 <= t_v71; y2 <= y1; y1 <= t_y0 - mq;
-                ma <= t_y0 - mq; mb <= K_VR2;
+                ma <= t_y0 - mq; mb <= rs ? RS_VR2 : K_VR2;
             end
             // ---------------------------------------------------------- DK Jr. discrete (verilator/dksnd/dkongjr_discrete.py)
             // walk: LS123 4K, VCO 5K pin 7 (n113), 4020 6L clocked by VCO 5K pin 10, 6K LS157 by 6H Q7
@@ -617,7 +718,7 @@ always_ff @(posedge clk) begin
                 end else vb_ph <= v_n;
             end
             8'd132: if (jr) begin
-                jr_s0 <= (os_walk_on && ((s7i & va_ff) ^ j_n106)) ? V0_2 : V4_9;   // 5N NAND, 1K pull-up
+                jr_s0 <= (os_walk_on && ((s7i & va_ff) ^ j_n106)) ? (s7i ? V0_2 : V_LAND) : V4_9;   // 5N NAND, 1K pull-up
                 // jump: LS123 4K, C24 mixer (n11 / n12) into VCO 8L, Q3 envelope
                 case ({os_jump_on, j_cnt[11]})
                     2'b00: ma <= M13_T00 - j_m13; 2'b01: ma <= M13_T01 - j_m13;
@@ -704,7 +805,10 @@ always_ff @(posedge clk) begin
             8'd102: if (jr) begin cr2 <= cr2 + mq; ma <= t_mix; mb <= JK_OUT; end
             8'd104: if (jr) out_v <= mq;
             // ---------------------------------------------------------- DK mixer, Q3 amp, output coupling
-            8'd69: if (!jr) begin t_mix <= mq + (walk_vo >>> 1); ma <= s_ri + j_ri; mb <= K_RI_OUT; end
+            8'd69: begin
+                t_dac <= mq;                                            // DAC x VR2 (Radar Scope mixer)
+                if (!jr) begin t_mix <= mq + (walk_vo >>> 1); ma <= s_ri + j_ri; mb <= K_RI_OUT; end
+            end
             8'd71: if (!jr) begin ma <= t_mix + mq; mb <= K_MIX; end
             8'd73: if (!jr) begin ma <= mq - mixf; mb <= A_CF; end
             8'd75: if (!jr) begin v_n = mixf + mq; mixf <= v_n; ma <= v_n - mixa; mb <= A_CAMP; end
@@ -727,6 +831,231 @@ always_ff @(posedge clk) begin
     end
 end
 
-always_ff @(posedge clk) audio <= (out_v > 32'sd32767) ? 16'sd32767 : (out_v < -32'sd32768) ? -16'sd32768 : out_v[15:0];
+// ------------------------------------------------------------------ Radar Scope discrete (rs): own sequencer + multiplier
+logic signed [31:0] rma = 0, rmb = 0, rmq = 0;
+always_ff @(posedge clk) rmq <= 32'((64'(rma) * 64'(rmb)) >>> 30);
+logic signed [31:0] r2_rdm, r2_rd2, r2_ri, r1_rdm, r1_rd2, r1_ri, r0_inv, r0_vg2, r0_cm, r0_c5, r0_rdm, r0_cr, r0_vo;
+logic signed [31:0] r7a_inv, r7a_vg2, r7_cm, r7_c5, r7b_inv, r7b_vg2, r7_ri, r7_cr, r7_vo, r_mixa, r_amphp, r_cr1, rs_out;
+logic signed [31:0] rt_u, rt_n20, rt_vi, rt_g1, rt_g2, rt_g3, rt_p1, rt_mix, rt_s7;
+logic               r0_ff, r7_ff, rt_low, rt_m1, rt_m2, rt_clamp, rt_skip;
+logic signed [31:0] ru_n, rd_n, rv_n, rtg, rn60;
+logic               rn16, rff_n;
+logic         [1:0] rsx;
+
+always_ff @(posedge clk) begin
+    if (reset || !rs) begin
+        r2_rdm <= 0; r2_rd2 <= 0; r2_ri <= 0; r1_rdm <= 0; r1_rd2 <= 0; r1_ri <= 0; r0_inv <= 0; r0_vg2 <= 0;
+        r0_cm <= 0; r0_c5 <= 0; r0_rdm <= 0; r0_cr <= 0; r0_vo <= 0; r7a_inv <= 0; r7a_vg2 <= 0; r7_cm <= 0; r7_c5 <= 0;
+        r7b_inv <= 0; r7b_vg2 <= 0; r7_ri <= 0; r7_cr <= 0; r7_vo <= 0; r_mixa <= 0; r_amphp <= 0; r_cr1 <= 0; rs_out <= 0;
+        r0_ff <= 1'b1; r7_ff <= 1'b1;
+    end else if (!pause) begin
+        case (st)
+            // ---------------------------------------------------------- SOUND2 (6H Q2): stomp form, noise QC
+            8'd0: begin
+                rt_m1 <= s2i;
+                ru_n = s2i ? 32'sd0 : V5;
+                rd_n = ru_n - r2_rdm;
+                rt_u <= ru_n;
+                rt_low <= rd_n < (s2i ? RS2_TV1 : RS2_TV0);
+                rma <= (rd_n < (s2i ? RS2_TV1 : RS2_TV0)) ? ru_n + V0_6 - r2_rdm : rd_n;
+                rmb <= (rd_n < (s2i ? RS2_TV1 : RS2_TV0)) ? (s2i ? RS2_AL1 : RS2_AL0) : (s2i ? RS2_AH1 : RS2_AH0);
+            end
+            8'd2: begin
+                rv_n = r2_rdm + rmq; r2_rdm <= rv_n;
+                rn16 = !rt_low && (rt_u - rv_n > (rt_m1 ? RS2_TG1 : RS2_TG0));
+                rma <= (rn16 ? 32'sd0 : V5) - r2_rd2; rmb <= rn16 ? RS2_A21 : RS2_A20;
+            end
+            8'd4: begin
+                rv_n = r2_rd2 + rmq; r2_rd2 <= rv_n;
+                rt_n20 <= vmax(vmax(32'sd0, rv_n - V0_4), (rcnt[2] ? V5 : 32'sd0) - V0_8);
+                rma <= r2_ri; rmb <= RS2_RG12;
+            end
+            8'd6: begin
+                if (rt_n20 - V0_7 < rmq) begin rma <= -r2_ri; rmb <= RS2_RA1; end
+                else                      begin rma <= rt_n20 - V0_7 - r2_ri; rmb <= RS2_RA0; end
+            end
+            8'd8: r2_ri <= r2_ri + rmq;
+            // ---------------------------------------------------------- SOUND1 (6H Q1): stomp form, noise QB
+            8'd10: begin
+                rt_m1 <= s1i;
+                ru_n = s1i ? 32'sd0 : V5;
+                rd_n = ru_n - r1_rdm;
+                rt_u <= ru_n;
+                rt_low <= rd_n < (s1i ? RS1_TV1 : RS1_TV0);
+                rma <= (rd_n < (s1i ? RS1_TV1 : RS1_TV0)) ? ru_n + V0_6 - r1_rdm : rd_n;
+                rmb <= (rd_n < (s1i ? RS1_TV1 : RS1_TV0)) ? (s1i ? RS1_AL1 : RS1_AL0) : (s1i ? RS1_AH1 : RS1_AH0);
+            end
+            8'd12: begin
+                rv_n = r1_rdm + rmq; r1_rdm <= rv_n;
+                rn16 = !rt_low && (rt_u - rv_n > (rt_m1 ? RS1_TG1 : RS1_TG0));
+                rma <= (rn16 ? 32'sd0 : V5) - r1_rd2; rmb <= rn16 ? RS1_A21 : RS1_A20;
+            end
+            8'd14: begin
+                rv_n = r1_rd2 + rmq; r1_rd2 <= rv_n;
+                rt_n20 <= vmax(vmax(32'sd0, rv_n - V0_4), (rcnt[1] ? V5 : 32'sd0) - V0_8);
+                rma <= r1_ri; rmb <= RS1_RG12;
+            end
+            8'd16: begin
+                if (rt_n20 - V0_7 < rmq) begin rma <= -r1_ri; rmb <= RS1_RA1; end
+                else                      begin rma <= rt_n20 - V0_7 - r1_ri; rmb <= RS1_RA0; end
+            end
+            8'd18: r1_ri <= r1_ri + rmq;
+            // ---------------------------------------------------------- SOUND0 (6H Q0): walk form, CD4049 type 2 LFO
+            8'd20: begin rt_vi <= r0_inv + r0_vg2; rma <= r0_inv + r0_vg2; rmb <= K_TFIDX; end
+            8'd22: begin rt_g3 <= tf(rt_vi, rmq); rma <= tf(rt_vi, rmq); rmb <= K_TFIDX; end
+            8'd24: begin
+                rt_g2 <= tf(rt_g3, rmq);
+                rt_clamp <= (rt_vi < -V0_1) || (rt_vi > V5_1);
+                rma <= rt_g3; rmb <= RS0_IR;
+            end
+            8'd25: begin rma <= vclip(rt_vi, -V0_1, V5_1); rmb <= Q1 - RS0_IR; end
+            8'd26: rt_p1 <= rmq;
+            8'd27: begin
+                rma <= rt_clamp ? rt_p1 - (r0_inv + rt_g2) + rmq : rt_g3 - (r0_inv + rt_g2);
+                rmb <= rt_clamp ? RS0_IWC : RS0_IW;
+                r0_vg2 <= rt_g2;
+            end
+            8'd29: begin r0_inv <= r0_inv + rmq; rma <= rt_g3; rmb <= RS0_CB; end           // resistor CV mixer, C51
+            8'd31: begin rma <= RS0_CA + rmq - r0_cm; rmb <= RS0_CE; end
+            8'd33: begin
+                rv_n = r0_cm + rmq; r0_cm <= rv_n;
+                // 555 (enable = 6H Q6; in reset: output 0, flip-flop set, cap empty)
+                rt_skip <= rv_n < V0_25 || !sfx[6];
+                rff_n = (r0_c5 >= rv_n) ? 1'b0 : (r0_c5 <= (rv_n >>> 1)) ? 1'b1 : r0_ff;
+                if (!sfx[6]) begin r0_ff <= 1'b1; r0_c5 <= 32'sd0; end
+                else if (rv_n >= V0_25) r0_ff <= rff_n;
+                rt_g1 <= rv_n;
+                rma <= rff_n ? V5 - r0_c5 : -r0_c5; rmb <= rff_n ? RS0_5C : RS0_5D;
+            end
+            8'd35: begin
+                if (!rt_skip) begin
+                    rv_n = r0_c5 + rmq;
+                    if (r0_ff && rv_n >= rt_g1)                begin r0_c5 <= rt_g1;        r0_ff <= 1'b0; end
+                    else if (!r0_ff && rv_n <= (rt_g1 >>> 1))  begin r0_c5 <= rt_g1 >>> 1;  r0_ff <= 1'b1; end
+                    else r0_c5 <= rv_n;
+                end
+            end
+            8'd36: begin                                                // rcdisc_mod, in2 = 555 output
+                rsx = {r0_ff & sfx[6], s0i};
+                rt_m1 <= s0i; rt_m2 <= r0_ff & sfx[6];
+                ru_n = s0i ? 32'sd0 : V5;
+                rd_n = ru_n - r0_rdm;
+                rt_u <= ru_n;
+                case (rsx)
+                    2'd0: rtg = RS0_TV0; 2'd1: rtg = RS0_TV1; 2'd2: rtg = RS0_TV2; default: rtg = RS0_TV3;
+                endcase
+                rt_low <= rd_n < rtg;
+                rma <= (rd_n < rtg) ? ru_n + V0_6 - r0_rdm : rd_n;
+                case (rsx)
+                    2'd0: rmb <= (rd_n < rtg) ? RS0_AL0 : RS0_AH0;
+                    2'd1: rmb <= (rd_n < rtg) ? RS0_AL1 : RS0_AH1;
+                    2'd2: rmb <= (rd_n < rtg) ? RS0_AL0 : RS0_AH2;
+                    default: rmb <= (rd_n < rtg) ? RS0_AL1 : RS0_AH3;
+                endcase
+            end
+            8'd38: begin
+                rv_n = r0_rdm + rmq; r0_rdm <= rv_n;
+                rma <= rt_u - rv_n; rmb <= rt_m1 ? RS0_G1 : RS0_G0;
+            end
+            8'd40: begin
+                rn60 = rt_m2 ? 32'sd0 : rt_low ? -V0_6 : rmq;
+                r0_vo <= rn60 - r0_cr;
+                rma <= rn60 - r0_cr; rmb <= RS0_CR;
+            end
+            8'd42: r0_cr <= r0_cr + rmq;
+            // ---------------------------------------------------------- SOUND7 (6H Q7): siren
+            // CD4049 type 2 LFO (R62 / R61 / C54) -> resistor CV mixer (C50) -> 555 (enable = Q7)
+            8'd44: begin rt_vi <= r7a_inv + r7a_vg2; rma <= r7a_inv + r7a_vg2; rmb <= K_TFIDX; end
+            8'd46: begin rt_g3 <= tf(rt_vi, rmq); rma <= tf(rt_vi, rmq); rmb <= K_TFIDX; end
+            8'd48: begin
+                rt_g2 <= tf(rt_g3, rmq);
+                rt_clamp <= (rt_vi < -V0_1) || (rt_vi > V5_1);
+                rma <= rt_g3; rmb <= RS7A_IR;
+            end
+            8'd49: begin rma <= vclip(rt_vi, -V0_1, V5_1); rmb <= Q1 - RS7A_IR; end
+            8'd50: rt_p1 <= rmq;
+            8'd51: begin
+                rma <= rt_clamp ? rt_p1 - (r7a_inv + rt_g2) + rmq : rt_g3 - (r7a_inv + rt_g2);
+                rmb <= rt_clamp ? RS7A_IWC : RS7A_IW;
+                r7a_vg2 <= rt_g2;
+            end
+            8'd53: begin r7a_inv <= r7a_inv + rmq; rma <= rt_g3; rmb <= RS7_CB; end
+            8'd55: begin rma <= RS7_CA + rmq - r7_cm; rmb <= RS7_CE; end
+            8'd57: begin
+                rv_n = r7_cm + rmq; r7_cm <= rv_n;
+                rt_skip <= rv_n < V0_25 || !sfx[7];
+                rff_n = (r7_c5 >= rv_n) ? 1'b0 : (r7_c5 <= (rv_n >>> 1)) ? 1'b1 : r7_ff;
+                if (!sfx[7]) begin r7_ff <= 1'b1; r7_c5 <= 32'sd0; end
+                else if (rv_n >= V0_25) r7_ff <= rff_n;
+                rt_g1 <= rv_n;
+                rma <= rff_n ? V5 - r7_c5 : -r7_c5; rmb <= rff_n ? RS7_5C : RS7_5D;
+            end
+            8'd59: begin
+                if (!rt_skip) begin
+                    rv_n = r7_c5 + rmq;
+                    if (r7_ff && rv_n >= rt_g1)                begin r7_c5 <= rt_g1;        r7_ff <= 1'b0; end
+                    else if (!r7_ff && rv_n <= (rt_g1 >>> 1))  begin r7_c5 <= rt_g1 >>> 1;  r7_ff <= 1'b1; end
+                    else r7_c5 <= rv_n;
+                end
+            end
+            // slow sine: CD4049 type 3 (R48 / R49 / C47), output = the first inverter
+            8'd60: begin rt_vi <= r7b_inv + r7b_vg2; rma <= r7b_inv + r7b_vg2; rmb <= K_TFIDX; end
+            8'd62: begin rt_g1 <= tf(rt_vi, rmq); rma <= tf(rt_vi, rmq); rmb <= K_TFIDX; end
+            8'd64: begin rt_g2 <= tf(rt_g1, rmq); rma <= tf(rt_g1, rmq); rmb <= K_TFIDX; end
+            8'd66: begin
+                rt_g3 <= tf(rt_g2, rmq);
+                rt_clamp <= (rt_vi < -V0_1) || (rt_vi > V5_1);
+                rma <= tf(rt_g2, rmq); rmb <= RS7B_IR;
+            end
+            8'd67: begin rma <= vclip(rt_vi, -V0_1, V5_1); rmb <= Q1 - RS7B_IR; end
+            8'd68: rt_p1 <= rmq;
+            8'd69: begin
+                rma <= rt_clamp ? rt_p1 - (r7b_inv + rt_g2) + rmq : rt_g3 - (r7b_inv + rt_g2);
+                rmb <= rt_clamp ? RS7B_IWC : RS7B_IW;
+                r7b_vg2 <= rt_g2;
+                rt_s7 <= rt_g1;
+            end
+            // R46 / C45 emitter follower (rcintegrate type 1, RTL form)
+            8'd71: begin r7b_inv <= r7b_inv + rmq; rma <= r7_ri; rmb <= RS7_RG12; end
+            8'd73: begin
+                if (rt_s7 - V0_7 < rmq) begin rma <= -r7_ri; rmb <= RS7_RA1; end
+                else                     begin rma <= rt_s7 - V0_7 - r7_ri; rmb <= RS7_RA0; end
+            end
+            8'd75: begin
+                rv_n = r7_ri + rmq; r7_ri <= rv_n;
+                // gate: Q7 and the 555 output low (MAME n55 x SOUND7 x (n54 < 2.5)), then C46 coupling
+                rn60 = (sfx[7] && !r7_ff) ? rv_n : 32'sd0;
+                r7_vo <= rn60 - r7_cr;
+                rma <= rn60 - r7_cr; rmb <= RS7_CR;
+            end
+            8'd77: r7_cr <= r7_cr + rmq;
+            // ---------------------------------------------------------- mixer, Q3 amp, output coupling (DAC x VR2 from slot 69)
+            8'd90: begin rma <= r2_ri; rmb <= RS2_OUT; end
+            8'd91: begin rma <= r1_ri; rmb <= RS1_OUT; end
+            8'd92: begin rt_mix <= rmq + t_dac; rma <= r0_vo; rmb <= RS0_OUT; end
+            8'd93: rt_mix <= rt_mix + rmq;
+            8'd94: begin rt_mix <= rt_mix + rmq; rma <= r7_vo; rmb <= RS7_OUT; end
+            8'd96: begin rma <= rt_mix + rmq; rmb <= RS_MIX; end
+            8'd98: begin rt_mix <= rmq; rma <= rmq - r_mixa; rmb <= A_CAMP; end
+            8'd100: begin
+                rv_n = r_mixa + rmq; r_mixa <= rv_n;
+                rt_mix <= rt_mix - rv_n;
+                rma <= rt_mix - rv_n - r_amphp; rmb <= A_AMPHP;
+            end
+            8'd102: begin rv_n = r_amphp + rmq; r_amphp <= rv_n; rma <= rt_mix - rv_n; rmb <= K_AMP; end
+            8'd104: begin
+                rv_n = vclip(V1_53 + (rmq <<< 4), 32'sd0, V5);
+                rt_mix <= rv_n - r_cr1;
+                rma <= rv_n - r_cr1; rmb <= RS_CRO;
+            end
+            8'd106: begin r_cr1 <= r_cr1 + rmq; rma <= rt_mix; rmb <= RS_OUT; end
+            8'd108: rs_out <= rmq;
+            default: ;
+        endcase
+    end
+end
+
+wire signed [31:0] snd_out = rs ? rs_out : out_v;
+always_ff @(posedge clk) audio <= (snd_out > 32'sd32767) ? 16'sd32767 : (snd_out < -32'sd32768) ? -16'sd32768 : snd_out[15:0];
 
 endmodule

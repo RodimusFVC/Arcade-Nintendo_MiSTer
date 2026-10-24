@@ -1,0 +1,67 @@
+<misterromdescription>
+    <name>SF-HiSplitter (Alt Sound)</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Space Fever</series>
+    <year>1979</year>
+    <manufacturer>Nintendo</manufacturer>
+    <category>Shooter</category>
+
+    <setname>highspltb</setname>
+    <parent>highsplt</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>2-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>4</num_buttons>
+    <buttons names="Fire,Game A,Game B,Game C,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="F0">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Bonus Life" bits="2,3" ids="1500,2000,3000,4000"/>
+        <dip name="Unused" bits="4" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="5" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="6" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="7" ids="Off,On" values="1,0"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="highspltb.zip|highsplt.zip">
+        <part crc="b8887351" name="f1-ha-.bin"/>
+        <part crc="cda933a7" name="f2-ha-.bin"/>
+        <part crc="de17578a" name="g1-ha-.bin"/>
+        <part crc="f1a90948" name="g2-ha-.bin"/>
+        <part crc="b0505da3" name="h1-ha-.bin"/>
+        <part crc="e91703e8" name="h2-ha-.bin"/>
+        <part crc="aa36b25d" name="i1-ha-.bin"/>
+        <part crc="eff9f82d" name="i2-ha-.bin"/>
+        <part repeat="0x6000">00</part>
+        <part crc="ce95dc5f" name="ss4.ic2"/>
+        <part repeat="0x7C00">00</part>
+        <part crc="c5914ec1" name="f5-i-.bin"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            08 10 00 00 00 00 F0 00 FF FF 80 80 00 80 80 80
+            05 03 04 13 14 00 00 11 0D 0B 0C 06 07 08 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>SF-HiSplitter (Alt Sound) (Nintendo)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

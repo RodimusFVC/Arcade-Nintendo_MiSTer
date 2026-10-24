@@ -33,6 +33,12 @@
 //  B 680 / 470 + 680; darlington, Sanyo EZV20), tools/resnet.py, all scaled by the same factor (brightest = 255).
 //  Pixel pipeline: the low-res pixel pair k + 1 is fetched during pair k (9+ clocks) and shown from its first dot.
 //
+//  tnx1 (Sky Skipper, MAME tnx1_state; no TNX1 schematic on hand):
+//    background: roh = 0x38 + x / 2 + scroll 0 + (scroll 2 bit 0 << 8), address {rovi 7-2, roh 7-2}, nibble = roh bit 8
+//    text palette 1A: address {palette bank bit 3, colour} (no A4 = A3 tie)
+//    sprite palette 2A / 3A: A6 = A5, A7 open (MAME tnx1_palette) -> {0, bank 0, bank 0, colour, pen}
+//    gfx2 16K: 256 sprites, planes 0x2000 apart, left 8 dots in the second 0x1000
+//
 //============================================================================
 
 module popeye_video
@@ -40,10 +46,12 @@ module popeye_video
     input  logic        clk,            // 49.152 MHz
     input  logic        reset,
 
+    input  logic        tnx1,           // Sky Skipper TNX1 board
     input  logic        flip,           // AY port B bit 0
     input  logic        crt_flip,       // MiSTer CRT Flip: whole picture turned 180 degrees
     input  logic  [7:0] scroll_x,       // dmasource[0]
     input  logic  [7:0] scroll_y,       // dmasource[1]
+    input  logic        scroll_h,       // dmasource[2] bit 0 (TNX1 background x bit 8)
     input  logic  [3:0] pal_bank,       // dmasource[3] (bit 3 = text / background bank, 2-0 sprite bank)
 
     output logic        ce_pix,
@@ -136,11 +144,11 @@ wire [8:0] ln_nx = (line == last_line) ? 9'd0 : line + 9'd1;
 wire [7:0] cx   = fl_t ? ~fx : fx;
 wire [7:0] cy   = fl_t ? ~fy : fy;
 wire [8:0] rovi = {1'b0, fl_y ? ~fy : fy} + {1'b0, scroll_y};
-wire [7:0] roh  = 8'h38 + (fl_x ? ~fx : fx) + scroll_x;
+wire [8:0] roh  = 9'h038 + {1'b0, fl_x ? ~fx : fx} + {1'b0, scroll_x} + {tnx1 & scroll_h, 8'd0};
 
 always_comb begin
     txt_a = {cy[7:3], cx[7:3]};
-    bg_a  = rovi[8] ? {rovi[6:1], roh[7:2]} : 12'd0;
+    bg_a  = !rovi[8] ? 12'd0 : tnx1 ? {rovi[7:2], roh[7:2]} : {rovi[6:1], roh[7:2]};
 end
 
 // resistor network levels (header)
@@ -180,14 +188,14 @@ always_ff @(posedge clk) begin
             gfx1_a <= {txt_code, cy[2:0]};
             ccol   <= cx[2:0];
             tcol   <= txt_col;
-            nib    <= rovi[7];
+            nib    <= tnx1 ? roh[8] : rovi[7];
             seq    <= 3'd3;
         end
         3'd3: seq <= 3'd4;                                  // char ROM latches its address
         3'd4: begin                                         // char ROM data: pick the layer, PROM address
             tpen   <= gfx1_d[ccol];
             bpen   <= nib ? bg_hi : bg_lo;
-            prom_a <= gfx1_d[ccol] ? {3'b001, tcol[3], tcol} : {3'b000, pal_bank[3], nib ? bg_hi : bg_lo};
+            prom_a <= gfx1_d[ccol] ? {3'b001, tnx1 ? pal_bank[3] : tcol[3], tcol} : {3'b000, pal_bank[3], nib ? bg_hi : bg_lo};
             seq    <= 3'd5;
         end
         3'd5: seq <= 3'd6;                                  // PROM latches its address
@@ -242,7 +250,7 @@ end
 
 // sprite palette for the fetched dot: address from the buffer output, colour registered one clock later
 wire [4:0] lq = rd_sel ? qB : qA;
-assign spal_a = {pal_bank[2:0], lq};
+assign spal_a = tnx1 ? {1'b0, pal_bank[0], pal_bank[0], lq} : {pal_bank[2:0], lq};
 logic       spr_pen;
 logic [7:0] spr_r, spr_g, spr_b;
 logic [1:0] lq_pen;
@@ -283,7 +291,8 @@ wire  [3:0] q_row  = slot_q[17:14];
 wire  [8:0] q_code = slot_q[13:5];
 wire  [2:0] q_col  = slot_q[4:2];
 wire        q_fx   = slot_q[1];
-assign gfx2_a = {d_rd[1], d_rd[0], q_code, ~q_row};                 // plane, quarter (0 = dots 8-15), code, row bottom-up
+assign gfx2_a = tnx1 ? {1'b0, d_rd[1], d_rd[0], q_code[7:0], ~q_row}  // plane, quarter (0 = dots 8-15), code, row bottom-up
+                   : {d_rd[1], d_rd[0], q_code, ~q_row};
 
 wire  [3:0] pj    = q_fx ? ~d_px[3:0] : d_px[3:0];
 wire  [7:0] gp0   = pj[3] ? d_g[0] : d_g[1];                         // plane 0 (pen bit 1)

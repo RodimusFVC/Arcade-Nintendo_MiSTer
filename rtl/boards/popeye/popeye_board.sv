@@ -21,6 +21,12 @@
 //  One byte per CPU clock (#unverified: the counter clock was not traced); MAME copies instantly.
 //  Sound: rtl/boards/popeye/popeye_sound.sv (AY channels into the TPP2-CPU output network).
 //
+//  tnx1 = Sky Skipper's TNX1 board (MAME tnx1_state; no TNX1 schematic on hand, so every delta below is MAME's):
+//    ROM address = bitswap(A, 15,14,13,12,11,10,8,7,0,1,2,4,5,9,3,6) ^ 0xFC (data swap as TPP2)
+//    RAM 8000-87FF + 8C00-8FFF (8800-8BFF writes ignored); background C000-CFFF, data bit 7 = high nibble
+//    DMA byte 2 bit 0 = background scroll x bit 8; no watchdog; SYSTEM bit 4 not the field (MAME: unknown, 0)
+//    sound: MAME has no TNX1 network (raw AY x 0.4); the TPP2 network is kept (same board family) #unverified
+//
 //============================================================================
 
 module popeye_board
@@ -29,6 +35,7 @@ module popeye_board
     input  logic        reset,
     input  logic        pause,
     input  logic        crt_flip,
+    input  logic        tnx1,           // Sky Skipper TNX1 board (MAME tnx1_state)
 
     output chip_pool_pkg::z80pa_i_t z80pa_0_i,
     input  chip_pool_pkg::z80pa_o_t z80pa_0_o,
@@ -107,16 +114,20 @@ wire cpu_we = wr & mreq & ~wr_q;        // one clock per write cycle
 wire io_we  = wr & iorq & ~m1 & ~iow_q;
 
 wire sel_rom  = !cpu_a[15];
-wire sel_ram  = cpu_a[15:11] == 5'b10001;                           // 8800-8FFF
+wire sel_ram  = tnx1 ? cpu_a[15:12] == 4'h8 && cpu_a[11:10] != 2'b10 // TNX1 8000-87FF, 8C00-8FFF
+                     : cpu_a[15:11] == 5'b10001;                     // 8800-8FFF
 wire sel_txt  = cpu_a[15:11] == 5'b10100;                           // A000-A7FF (A10: colour)
-wire sel_bg   = cpu_a[15:13] == 3'b110;                             // C000-DFFF
+wire sel_bg   = tnx1 ? cpu_a[15:12] == 4'hC : cpu_a[15:13] == 3'b110; // TNX1 C000-CFFF, TPP2 C000-DFFF
+wire bg_hi_w  = tnx1 ? cpu_d[7] : cpu_a[12];                         // high nibble select
 wire sel_prot = cpu_a[15:1]  == 15'h7000;                           // E000-E001
 
 logic vbl_start, field;
 
 // program ROM scramble
-assign rom_a = {cpu_a[14:10], cpu_a[8], cpu_a[7], cpu_a[6], cpu_a[3], cpu_a[9], cpu_a[5], cpu_a[4], cpu_a[2], cpu_a[1], cpu_a[0]}
-               ^ 15'h003F;
+assign rom_a = tnx1 ? {cpu_a[14:10], cpu_a[8], cpu_a[7], cpu_a[0], cpu_a[1], cpu_a[2], cpu_a[4], cpu_a[5], cpu_a[9], cpu_a[3], cpu_a[6]}
+                      ^ 15'h00FC
+                    : {cpu_a[14:10], cpu_a[8], cpu_a[7], cpu_a[6], cpu_a[3], cpu_a[9], cpu_a[5], cpu_a[4], cpu_a[2], cpu_a[1], cpu_a[0]}
+                      ^ 15'h003F;
 wire [7:0] rom_q = {rom_d[3], rom_d[4], rom_d[2], rom_d[5], rom_d[1], rom_d[6], rom_d[0], rom_d[7]};
 
 // ------------------------------------------------------------------ RAMs
@@ -126,16 +137,16 @@ logic [7:0] txt_code_q, txt_col_q;
 logic [11:0] bg_va;
 logic [7:0] bg_lo_q, bg_hi_q;
 
-// 8800-8FFF (7H TMM2016); port A: CPU or sprite DMA, port B: hiscore
+// 8000-8FFF window, 4K (TPP2: 8800-8FFF 7H TMM2016; TNX1: 8000-87FF + 8C00-8FFF); port A: CPU or sprite DMA, port B: hiscore
 logic       dma_req = 1'b0, dma_go = 1'b0;
 logic [9:0] dma_n;
 wire        dma_own = dma_req & busak;
 
-dpram_dc #(.widthad_a(11)) ram
+dpram_dc #(.widthad_a(12)) ram
 (
-    .clock_a(clk), .address_a(dma_own ? 11'h400 + {1'b0, dma_n} : cpu_a[10:0]), .data_a(cpu_d),
+    .clock_a(clk), .address_a(dma_own ? 12'hC00 + {2'b00, dma_n} : cpu_a[11:0]), .data_a(cpu_d),
     .wren_a(cpu_we & sel_ram & ~dma_own), .q_a(ram_q),
-    .clock_b(clk), .address_b(hs_address[10:0]), .data_b(hs_data_in), .wren_b(hs_write & pause), .q_b(hs_data_out)
+    .clock_b(clk), .address_b(hs_address[11:0]), .data_b(hs_data_in), .wren_b(hs_write & pause), .q_b(hs_data_out)
 );
 
 // sprite RAM (2T..1U): four byte lanes, one 32-bit entry per video read
@@ -168,12 +179,12 @@ dpram_dc #(.widthad_a(10)) txt_col
 // background nibbles (8P / 8S): C000-CFFF low, D000-DFFF high
 dpram_dc #(.widthad_a(12)) bg_lo
 (
-    .clock_a(clk), .address_a(cpu_a[11:0]), .data_a({4'h0, cpu_d[3:0]}), .wren_a(cpu_we & sel_bg & ~cpu_a[12]),
+    .clock_a(clk), .address_a(cpu_a[11:0]), .data_a({4'h0, cpu_d[3:0]}), .wren_a(cpu_we & sel_bg & ~bg_hi_w),
     .clock_b(clk), .address_b(bg_va), .q_b(bg_lo_q)
 );
 dpram_dc #(.widthad_a(12)) bg_hi
 (
-    .clock_a(clk), .address_a(cpu_a[11:0]), .data_a({4'h0, cpu_d[3:0]}), .wren_a(cpu_we & sel_bg & cpu_a[12]),
+    .clock_a(clk), .address_a(cpu_a[11:0]), .data_a({4'h0, cpu_d[3:0]}), .wren_a(cpu_we & sel_bg & bg_hi_w),
     .clock_b(clk), .address_b(bg_va), .q_b(bg_hi_q)
 );
 
@@ -202,14 +213,14 @@ end
 logic       nmi_q = 1'b0;
 logic [3:0] wd_cnt = 4'd0;
 logic       wd_reset = 1'b0;
-logic [7:0] scroll_x, scroll_y, pal_bank;
+logic [7:0] scroll_x, scroll_y, scroll_h, pal_bank;
 
-wire [3:0] wd_nx = (nmi_en || !wd_en) ? 4'd0 : wd_cnt + 4'd1;
+wire [3:0] wd_nx = (nmi_en || !wd_en || tnx1) ? 4'd0 : wd_cnt + 4'd1;     // TNX1: no watchdog (MAME tpp2 only)
 
 always_ff @(posedge clk) begin
     if (reset) begin
         nmi_q <= 1'b0; wd_cnt <= 4'd0; wd_reset <= 1'b0; dma_req <= 1'b0; dma_go <= 1'b0;
-        scroll_x <= 8'd0; scroll_y <= 8'd0; pal_bank <= 8'd0;
+        scroll_x <= 8'd0; scroll_y <= 8'd0; scroll_h <= 8'd0; pal_bank <= 8'd0;
     end else begin
         if (!nmi_en) nmi_q <= 1'b0;
         if (vbl_start) begin
@@ -226,6 +237,7 @@ always_ff @(posedge clk) begin
             case (dma_n)
                 10'd0: scroll_x <= ram_q;
                 10'd1: scroll_y <= ram_q;
+                10'd2: scroll_h <= ram_q;
                 10'd3: pal_bank <= ram_q;
                 default: ;
             endcase
@@ -264,7 +276,7 @@ always_comb begin
     case (cpu_a[1:0])
         2'd0: io_q = in0;
         2'd1: io_q = in1;
-        2'd2: io_q = {in2[7:5], field, in2[3:0]};
+        2'd2: io_q = {in2[7:5], field & ~tnx1, in2[3:0]};
         2'd3: io_q = ay_dout;
     endcase
 end
@@ -274,7 +286,7 @@ always_comb begin
     else if (sel_rom)   z80pa_0_i.di = rom_q;
     else if (sel_ram)   z80pa_0_i.di = ram_q;
     else if (sel_prot)  z80pa_0_i.di = prot_q;
-    else                z80pa_0_i.di = 8'h00;     // write-only text / background RAM, empty 8000-87FF
+    else                z80pa_0_i.di = 8'h00;     // write-only text / background RAM, empty 8000-87FF / 8800-8BFF
 end
 
 assign z80pa_0_i.reset_n = ~cpu_reset;
@@ -289,7 +301,8 @@ assign z80pa_0_i.busrq_n = ~dma_req;
 popeye_video video
 (
     .clk(clk), .reset(reset),
-    .flip(flip), .crt_flip(crt_flip), .scroll_x(scroll_x), .scroll_y(scroll_y), .pal_bank(pal_bank[3:0]),
+    .tnx1(tnx1), .flip(flip), .crt_flip(crt_flip), .scroll_x(scroll_x), .scroll_y(scroll_y), .scroll_h(scroll_h[0]),
+    .pal_bank(pal_bank[3:0]),
     .ce_pix(ce_pix), .vblank_start(vbl_start), .field(field),
     .txt_a(txt_va), .txt_code(txt_code_q), .txt_col(txt_col_q[3:0]),
     .bg_a(bg_va), .bg_lo(bg_lo_q[3:0]), .bg_hi(bg_hi_q[3:0]),

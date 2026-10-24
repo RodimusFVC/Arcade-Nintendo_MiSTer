@@ -1,0 +1,65 @@
+<misterromdescription>
+    <name>HeliFire</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>HeliFire</series>
+    <year>1980</year>
+    <manufacturer>Nintendo</manufacturer>
+    <category>Shooter</category>
+
+    <setname>helifire</setname>
+    <parent>helifire</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>8-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>1</num_buttons>
+    <buttons names="Fire,Not Used,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="E0">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Bonus Life" bits="2,3" ids="5000,6000,8000,10000"/>
+        <dip name="Coinage" bits="4" ids="2C/1C,1C/1C" values="1,0"/>
+        <dip name="Cabinet" bits="7" ids="Upright,Cocktail" values="1,0"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="helifire.zip">
+        <part crc="032f89ca" name="tub_f1_b"/>
+        <part crc="2774e70f" name="tub_f2_b"/>
+        <part crc="b5ad6e8a" name="tub_g1_b"/>
+        <part crc="5e015bf4" name="tub_g2_b"/>
+        <part crc="23bb4e5a" name="tub_h1_b"/>
+        <part crc="358227c6" name="tub_h2_b"/>
+        <part crc="0c679f44" name="tub_i1_b"/>
+        <part crc="d8b7a398" name="tub_i2_b"/>
+        <part crc="98ef24db" name="tub_j1_b"/>
+        <part crc="5e2b5877" name="tub_j2_b"/>
+        <part repeat="0x5800">00</part>
+        <part crc="9d77a31f" name="tub-e_ic5-a"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            0A 10 00 00 00 00 00 E0 FF FF 80 80 80 00 80 80
+            04 03 01 02 05 00 00 00 0C 0B 09 0A 0D 00 00 00
+            00 00 13 14 00 00 00 11 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>HeliFire (Set 1) (Nintendo)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

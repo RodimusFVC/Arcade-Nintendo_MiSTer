@@ -1,0 +1,67 @@
+<misterromdescription>
+    <name>Space Fever</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Space Fever</series>
+    <year>1979</year>
+    <manufacturer>Nintendo</manufacturer>
+    <category>Shooter</category>
+
+    <setname>spacefev</setname>
+    <parent>spacefev</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>2-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>4</num_buttons>
+    <buttons names="Fire,Game A,Game B,Game C,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="FC">
+        <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
+        <dip name="Unused" bits="2" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="3" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="4" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="5" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="6" ids="Off,On" values="1,0"/>
+        <dip name="Unused" bits="7" ids="Off,On" values="1,0"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="spacefev.zip">
+        <part crc="35f295bd" name="f1-ro-.bin"/>
+        <part crc="0c633f4c" name="f2-ro-.bin"/>
+        <part crc="f3d851cb" name="g1-ro-.bin"/>
+        <part crc="1faef63a" name="g2-ro-.bin"/>
+        <part crc="b365389d" name="h1-ro-.bin"/>
+        <part crc="a163e800" name="h2-ro-.bin"/>
+        <part crc="756b5582" name="i1-ro-p.bin"/>
+        <part repeat="0x6400">00</part>
+        <part crc="95c2c1ee" name="ss3.ic2"/>
+        <part repeat="0x7C00">00</part>
+        <part crc="c5914ec1" name="f5-i-.bin"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            08 10 00 00 00 00 FC 00 FF FF 80 80 00 80 80 80
+            05 03 04 13 14 00 00 11 0D 0B 0C 06 07 08 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>Space Fever (New Version) (Nintendo)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

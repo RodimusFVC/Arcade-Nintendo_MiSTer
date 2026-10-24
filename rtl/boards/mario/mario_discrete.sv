@@ -29,7 +29,13 @@ module mario_discrete
     input  logic        sound7,         // SOUND7 level (7F07 data inverted)
     output logic  [8:0] lvl0,           // Mario walk, fraction of the sample the output was high (0..256)
     output logic  [8:0] lvl1,           // Luigi walk
-    output logic  [8:0] lvl7            // skid
+    output logic  [8:0] lvl7,           // skid
+
+    // MULPOOL-2026-10-23: the shared multiplier (via mario_sound): products issued at sdiv 24-47 between steps
+    input  logic  [7:0] sdiv,
+    output logic signed [39:0] mul_a,
+    output logic signed [26:0] mul_b,
+    input  logic signed [66:0] mul_p
 );
 
 // ------------------------------------------------------------------ constants
@@ -100,32 +106,117 @@ end
 // ------------------------------------------------------------------ FC voltages (192 kHz one-pole)
 logic [31:0] v0 = 32'd0, v1 = 32'd0, v7a = 32'd0, v7b = 32'd0;      // upper 16 bits = FC (65536 = 3.2 V)
 logic [31:0] cnt = 32'd0;                                         // CD4020 (bit 3 = Q4, bit 11 = Q12) in clocks of 4K_B
-function automatic [31:0] rc(input [31:0] v, input [15:0] t, input [12:0] a);
-    logic signed [32:0] d;
-    logic signed [45:0] p;
-    d  = $signed({1'b0, t, 16'd0}) - $signed({1'b0, v});
-    p  = 46'(d) * $signed({33'd0, a});
-    rc = 32'($signed({1'b0, v}) + 33'(p >>> 24));
+// MULPOOL-2026-10-23: original rc() and FC update below
+// function automatic [31:0] rc(input [31:0] v, input [15:0] t, input [12:0] a);
+//     logic signed [32:0] d;
+//     logic signed [45:0] p;
+//     d  = $signed({1'b0, t, 16'd0}) - $signed({1'b0, v});
+//     p  = 46'(d) * $signed({33'd0, a});
+//     rc = 32'($signed({1'b0, v}) + 33'(p >>> 24));
+// endfunction
+// always_ff @(posedge clk) begin
+//     if (reset) begin v0 <= 32'd0; v1 <= 32'd0; v7a <= 32'd0; v7b <= 32'd0; end
+//     else if (step && run) begin
+//         v0  <= rc(v0,  q0 ? T_W : 16'd0, A_W0);
+//         v1  <= rc(v1,  q1 ? T_W : 16'd0, A_W1);
+//         v7a <= rc(v7a, q7 ? 16'd0 : T_S7A, A_S7A);              // 4J inverts the one-shot: high while idle
+//         v7b <= rc(v7b, cnt[11] ? 16'd0 : T_S7B, A_S7B);         // 4J inverts Q12
+//     end
+// end
+
+// ------------------------------------------------------------------ VCOs (phase accumulators, MSB = output)
+// MULPOOL-2026-10-23: original VCO increments below
+// logic [31:0] i0a, i0b, i1a, i1b, i7a, i7b;
+// always_ff @(posedge clk) if (step) begin
+//     i0a <= vco_inc(v0[31:16],  13'd6564);   // 1J 3.9n
+//     i0b <= vco_inc(v0[31:16],  13'd1164);   // 2J 22n
+//     i1a <= vco_inc(v1[31:16],  13'd656);    // 1J 39n (C5)
+//     i1b <= vco_inc(v1[31:16],  13'd3765);   // 2J 6.8n (C16)
+//     i7a <= vco_inc(v7a[31:16], 13'd1164);   // 4K 22n
+//     i7b <= vco_inc(v7b[31:16], 13'd5447);   // 4K 4.7n
+// end
+
+// MULPOOL-2026-10-23: the same increments and FC steps, products from the shared multiplier. v* change only at step,
+// so their products are issued in the period before; the one-shot / CD4020 targets are sampled at step, so each RC
+// gets both candidates (target high / 0). Same product bits as vco_inc() / rc(): bit-exact.
+logic [31:0] i0a, i0b, i1a, i1b, i7a, i7b;
+logic [15:0] fv [6];
+always_comb begin fv[0] = v0[31:16]; fv[1] = v0[31:16]; fv[2] = v1[31:16]; fv[3] = v1[31:16]; fv[4] = v7a[31:16]; fv[5] = v7b[31:16]; end
+localparam logic [12:0] SC [6] = '{13'd6564, 13'd1164, 13'd656, 13'd3765, 13'd1164, 13'd5447};
+logic [29:0] pr1 [6];                       // dt x v[9:0] (vco_inc's 30-bit product)
+logic [39:0] pr2 [6];                       // base x scale
+logic [17:0] t0v [6];
+logic signed [19:0] dtv [6];
+logic [27:0] basev [6];
+always_comb begin
+    for (int k = 0; k < 6; k++) begin
+        t0v[k]   = ls629({1'b0, fv[k][15:10]});
+        dtv[k]   = $signed({2'b00, ls629({1'b0, fv[k][15:10]} + 7'd1)}) - $signed({2'b00, t0v[k]});
+        basev[k] = 28'($signed(30'({12'd0, t0v[k]})) + 30'($signed(pr1[k]) >>> 10));
+    end
+end
+logic [31:0] incv [6];
+always_comb for (int k = 0; k < 6; k++) incv[k] = 32'(pr2[k] >> 8);
+// RC candidates: d = target - v (33 bits), p = d x a (46 bits)
+logic [31:0] rv [4];
+always_comb begin rv[0] = v0; rv[1] = v1; rv[2] = v7a; rv[3] = v7b; end
+localparam logic [15:0] RT [4] = '{T_W, T_W, T_S7A, T_S7B};
+localparam logic [12:0] RA [4] = '{A_W0, A_W1, A_S7A, A_S7B};
+logic signed [45:0] rph [4], rpl [4];     // target high / target 0
+wire  [7:0] s24 = sdiv - 8'd24, s32 = sdiv - 8'd32, s40 = sdiv - 8'd40;   // issue slots
+wire  [7:0] c26 = sdiv - 8'd26, c34 = sdiv - 8'd34, c42 = sdiv - 8'd42;   // capture slots (+2)
+wire  [2:0] k24 = s24[2:0], k32 = s32[2:0], kc1 = c26[2:0], kc2 = c34[2:0];
+wire  [1:0] k40 = s40[2:1], kc3 = c42[2:1];
+wire  signed [32:0] rdh = $signed({1'b0, RT[k40], 16'd0}) - $signed({1'b0, rv[k40]});   // target - v
+wire  signed [32:0] rdl = -$signed({1'b0, rv[k40]});                                    // 0 - v
+always_comb begin
+    mul_a = 40'sd0; mul_b = 27'sd0;
+    if (sdiv >= 8'd24 && sdiv < 8'd30) begin                      // dt x v[9:0]
+        mul_a = 40'(dtv[k24]); mul_b = 27'({17'd0, fv[k24][9:0]});
+    end else if (sdiv >= 8'd32 && sdiv < 8'd38) begin             // base x scale
+        mul_a = 40'({12'd0, basev[k32]}); mul_b = 27'({14'd0, SC[k32]});
+    end else if (sdiv >= 8'd40 && sdiv < 8'd48) begin             // RC: k = (sdiv - 40) / 2, odd = target 0
+        mul_a = sdiv[0] ? 40'(rdl) : 40'(rdh);
+        mul_b = 27'({14'd0, RA[k40]});
+    end
+end
+// in reset v = 0, so the products are the v = 0 constants (the pool may be serving another board while the variant
+// is not yet applied: the VCO phases run through reset and would pick up its products)
+always_ff @(posedge clk) begin
+    if (reset) begin
+        pr1[0] <= 30'd0; pr2[0] <= 40'd467639052;
+        pr1[1] <= 30'd0; pr2[1] <= 40'd82926852;
+        pr1[2] <= 30'd0; pr2[2] <= 40'd46735408;
+        pr1[3] <= 30'd0; pr2[3] <= 40'd268229895;
+        pr1[4] <= 30'd0; pr2[4] <= 40'd82926852;
+        pr1[5] <= 30'd0; pr2[5] <= 40'd388060621;
+        rph[0] <= 46'sd8474555056128; rpl[0] <= 46'sd0;
+        rph[1] <= 46'sd18039935336448; rpl[1] <= 46'sd0;
+        rph[2] <= 46'sd12078909292544; rpl[2] <= 46'sd0;
+        rph[3] <= 46'sd6041472204800; rpl[3] <= 46'sd0;
+    end else begin
+        if (sdiv >= 8'd26 && sdiv < 8'd32) pr1[kc1] <= 30'(mul_p);
+        if (sdiv >= 8'd34 && sdiv < 8'd40) pr2[kc2] <= 40'(mul_p);
+        if (sdiv >= 8'd42 && sdiv < 8'd50) begin
+            if (sdiv[0]) rpl[kc3] <= 46'(mul_p);
+            else         rph[kc3] <= 46'(mul_p);
+        end
+    end
+end
+function automatic [31:0] rcn(input [31:0] v, input signed [45:0] p);
+    rcn = 32'($signed({1'b0, v}) + 33'(p >>> 24));
 endfunction
 always_ff @(posedge clk) begin
     if (reset) begin v0 <= 32'd0; v1 <= 32'd0; v7a <= 32'd0; v7b <= 32'd0; end
     else if (step && run) begin
-        v0  <= rc(v0,  q0 ? T_W : 16'd0, A_W0);
-        v1  <= rc(v1,  q1 ? T_W : 16'd0, A_W1);
-        v7a <= rc(v7a, q7 ? 16'd0 : T_S7A, A_S7A);              // 4J inverts the one-shot: high while idle
-        v7b <= rc(v7b, cnt[11] ? 16'd0 : T_S7B, A_S7B);         // 4J inverts Q12
+        v0  <= rcn(v0,  q0 ? rph[0] : rpl[0]);
+        v1  <= rcn(v1,  q1 ? rph[1] : rpl[1]);
+        v7a <= rcn(v7a, q7 ? rpl[2] : rph[2]);                     // 4J inverts the one-shot: high while idle
+        v7b <= rcn(v7b, cnt[11] ? rpl[3] : rph[3]);                // 4J inverts Q12
     end
 end
-
-// ------------------------------------------------------------------ VCOs (phase accumulators, MSB = output)
-logic [31:0] i0a, i0b, i1a, i1b, i7a, i7b;
 always_ff @(posedge clk) if (step) begin
-    i0a <= vco_inc(v0[31:16],  13'd6564);   // 1J 3.9n
-    i0b <= vco_inc(v0[31:16],  13'd1164);   // 2J 22n
-    i1a <= vco_inc(v1[31:16],  13'd656);    // 1J 39n (C5)
-    i1b <= vco_inc(v1[31:16],  13'd3765);   // 2J 6.8n (C16)
-    i7a <= vco_inc(v7a[31:16], 13'd1164);   // 4K 22n
-    i7b <= vco_inc(v7b[31:16], 13'd5447);   // 4K 4.7n
+    i0a <= incv[0]; i0b <= incv[1]; i1a <= incv[2]; i1b <= incv[3]; i7a <= incv[4]; i7b <= incv[5];
 end
 
 logic [31:0] p0a = 32'd0, p0b = 32'd0, p1a = 32'd0, p1b = 32'd0, p7a = 32'd0, p7b = 32'd0;

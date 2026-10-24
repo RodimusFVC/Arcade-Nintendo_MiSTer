@@ -7,7 +7,7 @@
 //  ext_din by the next ce and performs writes at ce. As on the die, APU register writes ($4000-$4017) also go out
 //  on the external bus (MAME init_dkong3: DK3 relies on the RAM seeing them). $4015 reads come from the APU.
 //  DMC fetch: the next CPU read cycle is held with RDY (two idle cycles + the fetch cycle on the DMC address).
-//  The core's decimal mode is not disabled (T65 has no switch; the 2A03 cuts it on the die) — unused by DK3.
+//  Decimal mode is off (T65 BCD_en = 0 on the pooled cores, as the 2A03 cuts it on the die); the D flag still exists.
 //
 //============================================================================
 

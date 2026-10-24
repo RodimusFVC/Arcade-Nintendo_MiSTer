@@ -14,6 +14,8 @@
 //  DK Jr.: 7C80-7C87 4H LS259 (data bit 0): 0 char ROM bank, 1 -> sound CPU P2.6; 3D is an LS174 (5 bits).
 //  /WAIT: a VRAM access while /VRAM BUSY is low (outside h 258-377) waits, except in VBLK (TKG-04 CPU sheet 7F).
 //  NMI: set by the VBLK edge while the mask is on, cleared by mask = 0 (8F).
+//  Radar Scope (TRS-02, MAME radarscp): DK map; 7C80 W = grid colour (data 2-0, inverted), 7D81 = grid enable;
+//  background from dkong_radar.sv (gfx3 timing table); its discrete sound board = dkong_sound.sv Radar Scope mode.
 //
 //============================================================================
 
@@ -24,6 +26,7 @@ module dkong_board
     input  logic        pause,
     input  logic        crt_flip,
     input  logic        jr,             // Donkey Kong Jr. board
+    input  logic        radar,          // Radar Scope (TRS-02)
 
     output chip_pool_pkg::z80pa_i_t z80pa_0_i,
     input  chip_pool_pkg::z80pa_o_t z80pa_0_o,
@@ -52,6 +55,8 @@ module dkong_board
     input  logic  [7:0] prom_hi_d,      // c-2j[pal_a]
     output logic  [7:0] cc_a,
     input  logic  [3:0] prom_cc_d,      // v-5e[cc_a]
+    output logic [10:0] gfx3_a,         // Radar Scope timing table
+    input  logic  [7:0] gfx3_d,
 
     output logic        ce_pix,
     output logic  [7:0] video_r,
@@ -153,13 +158,14 @@ assign obj_q = obj_lane_q[obj_lane];
 
 // ------------------------------------------------------------------ latches
 logic [7:0] snd_latch, lat_6h, lat_5h, lat_4h;
+logic [2:0] grid_col;
 always_ff @(posedge clk) begin
     if (reset) begin
-        snd_latch <= 8'd0; lat_6h <= 8'd0; lat_5h <= 8'd0; lat_4h <= 8'd0;
+        snd_latch <= 8'd0; lat_6h <= 8'd0; lat_5h <= 8'd0; lat_4h <= 8'd0; grid_col <= 3'd0;
     end else if (cpu_we && !dma_own && sel_io) begin
         case (cpu_a[8:7])
             2'd0: snd_latch <= z80pa_0_o.dout;
-            2'd1: lat_4h[cpu_a[2:0]] <= z80pa_0_o.dout[0];
+            2'd1: begin lat_4h[cpu_a[2:0]] <= z80pa_0_o.dout[0]; grid_col <= ~z80pa_0_o.dout[2:0]; end
             2'd2: lat_6h[cpu_a[2:0]] <= z80pa_0_o.dout[0];
             2'd3: lat_5h[cpu_a[2:0]] <= z80pa_0_o.dout[0];
             default: ;
@@ -231,6 +237,8 @@ dkong_video video
 (
     .clk(clk), .reset(reset),
     .flip(flip), .sprite_bank(spr_bank), .palette_bank(pal_bank), .gfx_bank(jr & lat_4h[0]), .gfx1_8k(jr), .dk3(1'b0), .mario(1'b0), .scroll_y(8'd0), .crt_flip(crt_flip),
+    .radar(radar), .rs_snd2(lat_6h[2]), .rs_grid_on(lat_5h[1]), .rs_grid_col(grid_col), .rs_ans(mcs48_0_o.p2[5]),
+    .gfx3_a(gfx3_a), .gfx3_d(gfx3_d),
     .ce_pix(ce_pix), .cpu_cen_p(cen_p), .cpu_cen_n(cen_n), .vram_busy(vram_busy), .vblank_hw(vblk),
     .vram_a(vram_va), .vram_d(vram_vd), .spr_a(spr_a), .spr_d(spr_d),
     .gfx1_a(gfx1_a), .gfx1_d(gfx1_d), .gfx2_a(gfx2_a), .gfx2_d(gfx2_d),
@@ -241,7 +249,7 @@ dkong_video video
 // ------------------------------------------------------------------ sound board
 dkong_sound sound
 (
-    .clk(clk), .reset(reset), .pause(pause), .jr(jr),
+    .clk(clk), .reset(reset), .pause(pause), .jr(jr), .rs(radar),
     .mcs48_0_i(mcs48_0_i), .mcs48_0_o(mcs48_0_o),
     .tune(snd_latch), .sfx(lat_6h), .irq(snd_irq), .lat4h1(lat_4h[1]), .snd9(lat_5h[1]),
     .pa(snd_pa), .pd(snd_pd), .xa(snd_xa), .xd(snd_xd),

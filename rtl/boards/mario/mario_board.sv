@@ -58,6 +58,9 @@ module mario_board
     output logic        video_vblank,
 
     output logic signed [15:0] audio,
+    output logic signed [39:0] mul_a,   // MULPOOL-2026-10-23: shared multiplier (rtl/nintendo_board.sv)
+    output logic signed [26:0] mul_b,
+    input  logic signed [66:0] mul_p,
 
     input  logic [15:0] hs_address,
     input  logic  [7:0] hs_data_in,
@@ -240,6 +243,7 @@ dkong_video video
     .clk(clk), .reset(reset),
     .flip(flip), .sprite_bank(spr_bank), .palette_bank({1'b0, pal_bank}), .gfx_bank(gfx_bank), .gfx1_8k(1'b1),
     .dk3(1'b0), .mario(1'b1), .scroll_y(scroll), .crt_flip(crt_flip),
+    .radar(1'b0), .rs_snd2(1'b0), .rs_grid_on(1'b0), .rs_grid_col(3'd0), .rs_ans(1'b0), .gfx3_a(), .gfx3_d(8'd0),
     .ce_pix(ce_pix), .cpu_cen_p(), .cpu_cen_n(), .vram_busy(vram_busy), .vblank_hw(vblk),
     .vram_a(vram_va), .vram_d(vram_vd), .spr_a(spr_a), .spr_d(spr_d),
     .gfx1_a(gfx1_a), .gfx1_d(gfx1_d), .gfx2_a(gfx2_a), .gfx2_d(gfx2_d),
@@ -255,7 +259,7 @@ mario_sound sound
     .walk0(cpu_we && !dma_own && sel_io && cpu_a[9:7] == 3'd0), .walk1(cpu_we && !dma_own && sel_io && cpu_a[9:7] == 3'd1),
     .sound7(~lat_7f0[7]),
     .pa(snd_pa), .pd(snd_pd), .xa(snd_xa), .xd(snd_xd),
-    .audio(audio)
+    .audio(audio), .mul_a(mul_a), .mul_b(mul_b), .mul_p(mul_p)
 );
 
 endmodule

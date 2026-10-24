@@ -84,6 +84,7 @@ entity T80pa is
         DI          : in  std_logic_vector(7 downto 0);
         DO          : out std_logic_vector(7 downto 0);
         R800_mode   : in  std_logic := '0';
+        I8080       : in  std_logic := '0';  -- runtime 8080 mode (Mode = 0 build)
         REG         : out std_logic_vector(211 downto 0); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
         DIRSet      : in  std_logic := '0';
         DIR         : in  std_logic_vector(211 downto 0) := (others => '0') -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
@@ -110,10 +111,11 @@ begin
 
     u0 : T80
         generic map(
-            Mode    => Mode,
+            Mode_g  => Mode,
             IOWait  => 1
         )
         port map(
+            I8080   => I8080,
             CEN     => CEN,
             M1_n    => M1_n,
             IORQ    => IORQ,

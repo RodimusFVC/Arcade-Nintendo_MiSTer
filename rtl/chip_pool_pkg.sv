@@ -13,7 +13,7 @@
 
 package chip_pool_pkg;
 
-// Z80 (T80pa, Mode 0). RESET_n is on the bus.
+// Z80 (T80pa, Mode 0; runtime 8080 mode for the n8080 boards, driven by the dispatcher). RESET_n is on the bus.
 typedef struct packed {
     logic        reset_n;
     logic        cen_p;
@@ -35,6 +35,7 @@ typedef struct packed {
     logic        wr_n;
     logic        rfsh_n;
     logic        busak_n;
+    logic        inte;                    // IFF1 = the 8080's INTE pin in 8080 mode
 } z80pa_o_t;
 
 // 8035 / 8039 (T48 t8039_notri_extrom, EA low, program on pmem)

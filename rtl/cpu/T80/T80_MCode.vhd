@@ -79,7 +79,7 @@ use work.T80_Pack.all;
 
 entity T80_MCode is
 	generic(
-		Mode   : integer := 0;
+		Mode_g   : integer := 0;
 		Flag_C : integer := 0;
 		Flag_N : integer := 1;
 		Flag_P : integer := 2;
@@ -90,6 +90,7 @@ entity T80_MCode is
 		Flag_S : integer := 7
 	);
 	port(
+		I8080  : in  std_logic := '0';  -- runtime 8080 mode (on a Mode_g = 0 build: Mode = 2 while high)
       IR          : in std_logic_vector(7 downto 0);
       ISet        : in std_logic_vector(1 downto 0);
       MCycle      : in std_logic_vector(2 downto 0);
@@ -159,12 +160,14 @@ end T80_MCode;
 
 architecture rtl of T80_MCode is
 
+	signal Mode : integer range 0 to 3;   -- Mode_g, or 2 (8080) while I8080 = 1 on a Mode_g = 0 build
+
 	function is_cc_true(
 		F : std_logic_vector(7 downto 0);
 		cc : bit_vector(2 downto 0)
 		) return boolean is
 	begin
-		if Mode = 3 then
+		if Mode_g = 3 then
 			case cc is
 			when "000" => return F(Flag_Z) = '0'; -- NZ
 			when "001" => return F(Flag_Z) = '1'; -- Z
@@ -190,8 +193,9 @@ architecture rtl of T80_MCode is
 	end;
 
 begin
+	Mode <= 2 when I8080 = '1' and Mode_g = 0 else Mode_g;
 
-	process (IR, ISet, MCycle, F, NMICycle, IntCycle, XY_State, R800_mode)
+	process (IR, ISet, MCycle, F, NMICycle, IntCycle, XY_State, R800_mode, Mode)
 		variable DDD   : std_logic_vector(2 downto 0);
 		variable SSS   : std_logic_vector(2 downto 0);
 		variable DPair : std_logic_vector(1 downto 0);

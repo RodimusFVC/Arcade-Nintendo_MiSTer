@@ -22,6 +22,10 @@
 //  halves 0x1000 apart, index {bank, colour, pen}. Sprite RAM scan = 128 entries of the bank picked by 2PSL (latch Q1;
 //  TMA1-VIDEO 7B LS157: A9 = 2PSL, A8-A0 = 128H..1/2H) as on DK; MAME draws all 256. Palette = one 512 x 8
 //  PROM (first half, Nintendo monitor) R 7-5 / G 4-2 / B 1-0 through the TKG-04 levels.
+//  Radar Scope (TRS-02, MAME radarscp): DK picture; where the tile / sprite pen is 0 the background shows instead of
+//  black: blue level, stars and radar grid from dkong_radar.sv (prepared for the next line from h 256). Background
+//  levels: MAME radarscp_* res_net infos without normalize (star R 255; grid bit 0 -> 255, 1 -> 21 R/G, 71 B).
+//  The background is drawn in screen order and is not turned by CRT Flip (the board flip picks the table half).
 //
 //============================================================================
 
@@ -40,6 +44,13 @@ module dkong_video
     input  logic        mario,          // Mario Bros.: 6.000 MHz dots, scroll, code colours, 3bpp sprites
     input  logic  [7:0] scroll_y,       // Mario: 7D00 + 17 (0 elsewhere)
     input  logic        crt_flip,       // MiSTer CRT Flip: whole picture turned 180 degrees
+    input  logic        radar,          // Radar Scope background
+    input  logic        rs_snd2,        // 6H Q2 (SOUND2)
+    input  logic        rs_grid_on,     // 7D81
+    input  logic  [2:0] rs_grid_col,    // 7C80 data 2-0 inverted
+    input  logic        rs_ans,         // 8035 P2.5
+    output logic [10:0] gfx3_a,         // radar / star timing table
+    input  logic  [7:0] gfx3_d,
 
     // timing out
     output logic        ce_pix,
@@ -244,6 +255,19 @@ always_ff @(posedge clk) begin
     endcase
 end
 
+// ------------------------------------------------------------------ Radar Scope background
+wire [8:0] rs_y = v_nx[8] ? {1'b0, v_nx[7:0]} : 9'(v_nx[7:0]) + 9'd8;      // MAME vpos of the next line
+logic [1:0] rs_t, bg_t;
+logic [7:0] rs_b, bg_b;
+dkong_radar rsbg
+(
+    .clk(clk), .reset(reset | ~radar),
+    .start(radar && ce_pix && h_nx == 9'd256), .y(rs_y), .flip(flip), .snd2(rs_snd2), .grid_on(rs_grid_on),
+    .ans(rs_ans), .gfx3_a(gfx3_a), .gfx3_d(gfx3_d),
+    .rd_bank(v[0]), .rd_col(h[7:2]), .rd_type(rs_t), .rd_blue(rs_b)
+);
+always_ff @(posedge clk) if (en && ph == 3'd7) begin bg_t <= (h[1:0] == 2'd0) ? rs_t : 2'd0; bg_b <= rs_b; end
+
 // ------------------------------------------------------------------ colour
 // MAME tile colour: colour code + 16 * palette bank; sprites draw over tiles where their pen != 0
 // Mario: sprites {bank, colour, pen 3}, tiles {bank, 1, code 7-5, 0, pen}
@@ -290,7 +314,15 @@ always_ff @(posedge clk) begin
             r <= lv4(pal_lo_d[7:4]);
             g <= lv4(pal_lo_d[3:0]);
             b <= lv4(pal_hi_d[3:0]);
-        end else if (pix[1:0] == 2'd0) {r, g, b} <= 24'd0;
+        end else if (pix[1:0] == 2'd0) begin
+            if (!radar) {r, g, b} <= 24'd0;
+            else if (bg_t == 2'd1) {r, g, b} <= {8'd255, 16'd0};                       // star
+            else if (bg_t == 2'd2) begin                                                  // grid
+                r <= rs_grid_col[0] ? 8'd21 : 8'd255;
+                g <= rs_grid_col[1] ? 8'd21 : 8'd255;
+                b <= rs_grid_col[2] ? 8'd71 : 8'd255;
+            end else {r, g, b} <= {16'd0, bg_b};                                          // blue
+        end
         else begin
             r <= lv_rg(pal_hi_d[3:1]);
             g <= lv_rg({pal_hi_d[0], pal_lo_d[3:2]});
