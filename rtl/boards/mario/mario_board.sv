@@ -242,7 +242,7 @@ dkong_video video
 (
     .clk(clk), .reset(reset),
     .flip(flip), .sprite_bank(spr_bank), .palette_bank({1'b0, pal_bank}), .gfx_bank(gfx_bank), .gfx1_8k(1'b1),
-    .dk3(1'b0), .mario(1'b1), .scroll_y(scroll), .crt_flip(crt_flip),
+    .dk3(1'b0), .spr256(1'b0), .mario(1'b1), .scroll_y(scroll), .crt_flip(crt_flip),
     .radar(1'b0), .rs_snd2(1'b0), .rs_grid_on(1'b0), .rs_grid_col(3'd0), .rs_ans(1'b0), .gfx3_a(), .gfx3_d(8'd0),
     .ce_pix(ce_pix), .cpu_cen_p(), .cpu_cen_n(), .vram_busy(vram_busy), .vblank_hw(vblk),
     .vram_a(vram_va), .vram_d(vram_vd), .spr_a(spr_a), .spr_d(spr_d),

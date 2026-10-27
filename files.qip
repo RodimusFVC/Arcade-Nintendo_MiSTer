@@ -1,6 +1,7 @@
 set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
 
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chip_pool_pkg.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_kits_pkg.sv
 set_global_assignment -name SYSTEMVERILOG_FILE Arcade-Nintendo.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/nintendo_board.sv
 
@@ -25,6 +26,8 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_sound.
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/n8080/n8080_board.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/n8080/n8080_sound.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/sn76477.sv
+# jotego jteeprom (GPL-3, Jose Tejada Gomez): 93C46 for the Braze kits
+set_global_assignment -name VERILOG_FILE rtl/jteeprom/hdl/jt9346.v
 
 set_global_assignment -name QIP_FILE rtl/cpu/T80/T80.qip
 set_global_assignment -name QIP_FILE rtl/cpu/i8039/i8039.qip

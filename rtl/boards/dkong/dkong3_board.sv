@@ -17,6 +17,8 @@
 //    held in reset while 7D80 bit 0 = 0. Each: 0000-07FF RAM (mirrored to 7FFF), 8000-9FFF ROM (mirrored to FFFF),
 //    $4016 / $4017 = sound latch 1 / 2 (#1), latch 3 / none (#2). AUX A / B of both chips (100 Ohm pad loads) are
 //    summed with equal weights into the LM3900 chain (6P; mixing resistors not legible on the 150 dpi scan), DC-blocked.
+//  Braze kit (dkong3hs, rom_dec 4; MAME init_dkong3hs): kit ROM 64K at 0000-5FFF and 8000-FFFF (straight, decoded by
+//    dkong_kits_pkg), 93C46 at C000 (write bit 0 DI, 1 CLK, 2 CS; read bit 0 = DO).
 //
 //============================================================================
 
@@ -26,6 +28,13 @@ module dkong3_board
     input  logic        reset,
     input  logic        pause,
     input  logic        crt_flip,
+    input  logic  [3:0] rom_dec,        // conversion kit (dkong_kits_pkg), 0 = none
+
+    // Braze kit 93C46 (rtl/nintendo_board.sv)
+    output logic        eep_cs,
+    output logic        eep_clk,
+    output logic        eep_di,
+    input  logic        eep_do,
 
     output chip_pool_pkg::z80pa_i_t z80pa_0_i,
     input  chip_pool_pkg::z80pa_o_t z80pa_0_o,
@@ -40,7 +49,9 @@ module dkong3_board
     input  logic  [7:0] dsw1,
 
     // ROMs (shared blocks in rtl/nintendo_board.sv)
-    output logic [14:0] rom_a,          // 8000-9FFF read at ROM 6000 (MRA placement)
+    // CONV-2026-10-26: 16-bit ROM address (Braze kit ROM 64K). Original below.
+    // output logic [14:0] rom_a,          // 8000-9FFF read at ROM 6000 (MRA placement)
+    output logic [15:0] rom_a,          // 8000-9FFF read at ROM 6000 (MRA placement)
     input  logic  [7:0] rom_d,
     output logic [12:0] snd1_a,         // 2A03 #1 ROM (soundcpu slot)
     input  logic  [7:0] snd1_d,
@@ -98,6 +109,7 @@ wire        m1       = ~z80pa_0_o.m1_n;
 wire        rd       = ~z80pa_0_o.rd_n;
 wire        wr       = ~z80pa_0_o.wr_n;
 wire        rfsh     = ~z80pa_0_o.rfsh_n;
+wire        braze    = rom_dec == dkong_kits_pkg::DEC_BRAZE;   // dkong3hs
 wire        busak    = ~z80pa_0_o.busak_n;
 
 logic wr_q = 1'b0, rd_q = 1'b0, iow_q = 1'b0, ior_q = 1'b0;
@@ -127,7 +139,9 @@ wire [15:0] bus_a   = dma_own ? dma_a : cpu_a;
 wire        bus_we  = dma_own ? dma_memw & dma_mreq : cpu_we;
 wire  [7:0] bus_d   = dma_own ? dma_data : z80pa_0_o.dout;
 
-wire sel_rom  = bus_a < 16'h6000 || bus_a[15:13] == 3'b100;           // 0000-5FFF, 8000-9FFF
+// CONV-2026-10-26: Braze kit ROM also at A000-FFFF. Original below.
+// wire sel_rom  = bus_a < 16'h6000 || bus_a[15:13] == 3'b100;           // 0000-5FFF, 8000-9FFF
+wire sel_rom  = bus_a < 16'h6000 || bus_a[15:13] == 3'b100 || (braze && bus_a[15]);   // 0000-5FFF, 8000-9FFF
 wire sel_ram  = bus_a[15:12] == 4'h6;
 wire sel_obj  = bus_a[15:10] == 6'b011100;                         // 7000-73FF
 wire sel_vram = bus_a[15:10] == 6'b011101;                         // 7400-77FF
@@ -222,18 +236,44 @@ always_comb begin
     endcase
 end
 
-assign rom_a = bus_a[15] ? {2'b11, bus_a[12:0]} : bus_a[14:0];
+// Braze kit EEPROM pins (C000)
+wire  sel_eep = braze && cpu_a == 16'hC000;
+logic eep_cs_q = 1'b0, eep_clk_q = 1'b0, eep_di_q = 1'b0;
+always_ff @(posedge clk) begin
+    if (reset)                                {eep_cs_q, eep_clk_q, eep_di_q} <= 3'd0;
+    else if (cpu_we && !dma_own && sel_eep)   {eep_cs_q, eep_clk_q, eep_di_q} <= z80pa_0_o.dout[2:0];
+end
+assign eep_cs  = eep_cs_q;
+assign eep_clk = eep_clk_q;
+assign eep_di  = eep_di_q;
+
+// CONV-2026-10-26: Braze kit ROM address / data decode, EEPROM read. Original below.
+// assign rom_a = bus_a[15] ? {2'b11, bus_a[12:0]} : bus_a[14:0];
+//
+// always_comb begin
+//     if (iorq && !m1)    z80pa_0_i.di = dma_dout;
+//     else if (sel_rom)   z80pa_0_i.di = rom_d;
+//     else if (sel_ram)   z80pa_0_i.di = ram_q;
+//     else if (sel_obj)   z80pa_0_i.di = obj_q;
+//     else if (sel_vram)  z80pa_0_i.di = vram_q;
+//     else if (sel_io)    z80pa_0_i.di = io_q;
+//     else                z80pa_0_i.di = 8'hFF;
+// end
+// assign mem_q = sel_ram ? ram_q : sel_obj ? obj_q : sel_vram ? vram_q : sel_rom ? rom_d : 8'hFF;
+assign rom_a = braze ? dkong_kits_pkg::braze_addr(bus_a) : {1'b0, bus_a[15] ? {2'b11, bus_a[12:0]} : bus_a[14:0]};
+wire [7:0] rom_q = braze ? dkong_kits_pkg::braze_data(rom_d) : rom_d;
 
 always_comb begin
     if (iorq && !m1)    z80pa_0_i.di = dma_dout;
-    else if (sel_rom)   z80pa_0_i.di = rom_d;
+    else if (sel_eep)   z80pa_0_i.di = {7'd0, eep_do};
+    else if (sel_rom)   z80pa_0_i.di = rom_q;
     else if (sel_ram)   z80pa_0_i.di = ram_q;
     else if (sel_obj)   z80pa_0_i.di = obj_q;
     else if (sel_vram)  z80pa_0_i.di = vram_q;
     else if (sel_io)    z80pa_0_i.di = io_q;
     else                z80pa_0_i.di = 8'hFF;
 end
-assign mem_q = sel_ram ? ram_q : sel_obj ? obj_q : sel_vram ? vram_q : sel_rom ? rom_d : 8'hFF;
+assign mem_q = sel_ram ? ram_q : sel_obj ? obj_q : sel_vram ? vram_q : sel_rom ? rom_q : 8'hFF;
 
 assign z80pa_0_i.reset_n = ~reset;
 assign z80pa_0_i.cen_p   = cen_p & run;
@@ -247,7 +287,7 @@ assign z80pa_0_i.busrq_n = ~dma_busrq;
 dkong_video video
 (
     .clk(clk), .reset(reset),
-    .flip(flip), .sprite_bank(spr_bank), .palette_bank(pal_bank), .gfx_bank(gfx_bank), .gfx1_8k(1'b1), .dk3(1'b1), .mario(1'b0), .scroll_y(8'd0),
+    .flip(flip), .sprite_bank(spr_bank), .palette_bank(pal_bank), .gfx_bank(gfx_bank), .gfx1_8k(1'b1), .dk3(1'b1), .spr256(1'b0), .mario(1'b0), .scroll_y(8'd0),
     .radar(1'b0), .rs_snd2(1'b0), .rs_grid_on(1'b0), .rs_grid_col(3'd0), .rs_ans(1'b0), .gfx3_a(), .gfx3_d(8'd0),
     .crt_flip(crt_flip),
     .ce_pix(ce_pix), .cpu_cen_p(), .cpu_cen_n(), .vram_busy(vram_busy), .vblank_hw(vblk),

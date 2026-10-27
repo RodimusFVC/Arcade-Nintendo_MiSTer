@@ -14,6 +14,7 @@
 //  Variant 8: Space Fever / SF-HiSplitter / Space Launcher (MAME n8080.cpp spacefev; 8080 = pooled T80 in 8080 mode)
 //  Variant 9: Sheriff / Bandido (MAME n8080.cpp sheriff)
 //  Variant 10: HeliFire (MAME n8080.cpp helifire)
+//  Variants 0 / 1 / 2 also run the conversion kits on DK hardware (rom_dec: Donkey King Jr., Epos, Braze)
 //
 //  ioctl index 0 (MRA), images stored as dumped; tools/gen_mra.py places MAME regions:
 //    0x00000 - 0x07FFF  maincpu  (DK3: 8000-9FFF at 0x6000)
@@ -31,6 +32,9 @@
 //    0x10000 (4I, 256), proms 0x12000 (3N colour, 32)
 //  Radar Scope: DK layout + gfx3 (radar / star timing table, 2K) at 0x11000 (read on gfx1 port A after the load)
 //  n8080: maincpu 0x00000 (16K), 8035 0x08000 (1K), colour PROM 0x10000 (Sheriff 1K, Space Fever 32) in the gfx1 block
+//  Braze kits (DK / DK Jr. / DK3 boards, rom_dec 4-6): kit ROM 0x0000-0x7FFF at index 0 0x00000, 0x8000-0xFFFF on
+//    ioctl index 5 (CPU ROM block upper half; the original maincpu ROMs are not loaded). 93C46 (jotego jt9346) contents = MRA
+//    <nvram index="4" size="128">, filled with FF while index 0 loads (MAME eeprom default; the NVRAM file comes after).
 //
 //============================================================================
 
@@ -40,7 +44,10 @@ module nintendo_board
     input  logic        reset,
     input  logic        pause,
     input  logic  [7:0] variant,
-    input  logic  [7:0] game_flags2,    // [0] IN2 bit 6 = sound CPU status
+    input  logic  [7:0] game_flags2,    // [0] IN2 bit 6 = sound CPU status, [1] steering dial, [2] 16K sprite ROM (DK / Jr.), [3] 8K char ROM (DK)
+    input  logic  [3:0] rom_dec,        // conversion kit decode (rtl/boards/dkong/dkong_kits_pkg.sv)
+    input  logic  [1:0] dial0,          // Street Heat steering dial P1 / P2
+    input  logic  [1:0] dial1,
     output logic        ce_pix,
 
     input  logic  [7:0] in0,
@@ -53,6 +60,13 @@ module nintendo_board
     input  logic [24:0] ioctl_addr,
     input  logic  [7:0] ioctl_dout,
     input  logic        ioctl_wr0,
+    input  logic        ioctl_wr5,      // index 5: Braze kit ROM 8000-FFFF
+
+    // Braze kit EEPROM image (ioctl index 4: load / save)
+    input  logic  [6:0] nv_addr,
+    input  logic  [7:0] nv_din,
+    input  logic        nv_we,
+    output logic  [7:0] nv_dout,
 
     input  logic        crt_flip,
     input  logic  [3:0] h_adj,
@@ -78,6 +92,10 @@ module nintendo_board
 /////////////////////////////  Shared ROM blocks  /////////////////////////////
 
 wire load_cpu  = ioctl_wr0 && ioctl_addr[24:15] == 10'h000;        // 0x00000-0x07FFF
+// BRAZEIDX5-2026-10-26: the kit ROM's upper half moved to ioctl index 5. At index 0 0x20000 the MRA's zero padding from
+// 0x12500 ran through 0x18000-0x1FFFF (Popeye's gfx2 load window) and wiped the DK sprite ROM. Original below.
+// wire load_cpuh = ioctl_wr0 && ioctl_addr[24:15] == 10'h004;        // 0x20000-0x27FFF (Braze kit ROM 8000-FFFF)
+wire load_cpuh = ioctl_wr5 && ioctl_addr[24:15] == 10'h000;        // index 5 0x0000-0x7FFF (Braze kit ROM 8000-FFFF)
 wire load_snd  = ioctl_wr0 && ioctl_addr[24:13] == 12'h004;        // 0x08000-0x09FFF
 wire load_snd2 = ioctl_wr0 && ioctl_addr[24:13] == 12'h005;        // 0x0A000-0x0BFFF
 wire load_gfx2 = ioctl_wr0 && ioctl_addr[24:14] == 11'h003;        // 0x0C000-0x0FFFF
@@ -93,7 +111,10 @@ wire is_sfb = variant == 8'd5;
 wire is_rs  = variant == 8'd6;
 wire is_n80 = variant == 8'd8 || variant == 8'd9 || variant == 8'd10;   // n8080 board (8 Space Fever, 9 Sheriff, 10 HeliFire)
 
-logic [14:0] rom_a, dk_rom_a, dk3_rom_a, pop_rom_a, mar_rom_a, sfb_rom_a, n80_rom_a;
+// CONV-2026-10-26: CPU ROM address 16 bits for the DK boards (Braze kit ROM 64K). Original below.
+// logic [14:0] rom_a, dk_rom_a, dk3_rom_a, pop_rom_a, mar_rom_a, sfb_rom_a, n80_rom_a;
+logic [15:0] rom_a, dk_rom_a, dk3_rom_a;
+logic [14:0] pop_rom_a, mar_rom_a, sfb_rom_a, n80_rom_a;
 logic  [7:0] rom_d;
 logic [11:0] snd_pa, dk_snd_pa, mar_snd_pa, sfb_snd_pa, n80_snd_pa;
 logic [12:0] snd_xa, dk_snd_xa, dk3_snd1_a, dk3_snd2_a, mar_snd_xa;
@@ -106,16 +127,54 @@ logic [14:0] gfx2_a, dk_gfx2_a, dk3_gfx2_a, pop_gfx2_a, mar_gfx2_a, sfb_gfx2_a;
 logic  [7:0] gfx1_d, gfx2_d;
 logic  [7:0] pal_a, cc_a, dk_pal_a, dk3_pal_a, dk_cc_a, dk3_cc_a, pop_cc_a, pop_pal_a, mar_pal_a, sfb_pal_a;
 logic  [7:0] prom_lo_q, prom_hi_q, prom_cc_q;
-assign rom_a  = is_dk3 ? dk3_rom_a  : is_pop ? pop_rom_a : is_mar ? mar_rom_a : is_sfb ? sfb_rom_a : is_n80 ? n80_rom_a : dk_rom_a;
+// CONV-2026-10-26: original below
+// assign rom_a  = is_dk3 ? dk3_rom_a  : is_pop ? pop_rom_a : is_mar ? mar_rom_a : is_sfb ? sfb_rom_a : is_n80 ? n80_rom_a : dk_rom_a;
+assign rom_a  = is_dk3 ? dk3_rom_a  : is_pop ? {1'b0, pop_rom_a} : is_mar ? {1'b0, mar_rom_a} : is_sfb ? {1'b0, sfb_rom_a} :
+                is_n80 ? {1'b0, n80_rom_a} : dk_rom_a;
 assign gfx1_a = is_dk3 ? dk3_gfx1_a : is_pop ? {2'b00, pop_gfx1_a} : is_mar ? mar_gfx1_a : is_sfb ? sfb_gfx1_a : is_n80 ? n80_gfx1_a : dk_gfx1_a;
 assign gfx2_a = is_dk3 ? dk3_gfx2_a : is_pop ? pop_gfx2_a : is_mar ? mar_gfx2_a : is_sfb ? sfb_gfx2_a : dk_gfx2_a;
 assign pal_a  = is_dk3 ? dk3_pal_a  : is_pop ? pop_pal_a : is_mar ? mar_pal_a : is_sfb ? sfb_pal_a : dk_pal_a;
 assign cc_a   = is_dk3 ? dk3_cc_a   : is_pop ? pop_cc_a : dk_cc_a;
 
-dpram_dc #(.widthad_a(15)) rom_cpu
+// CONV-2026-10-26: 64K (upper half = Braze kit ROM 8000-FFFF). Original below.
+// dpram_dc #(.widthad_a(15)) rom_cpu
+// (
+//     .clock_a(clk), .address_a(ioctl_addr[14:0]), .data_a(ioctl_dout), .wren_a(load_cpu),
+//     .clock_b(clk), .address_b(rom_a), .q_b(rom_d)
+// );
+dpram_dc #(.widthad_a(16)) rom_cpu
 (
-    .clock_a(clk), .address_a(ioctl_addr[14:0]), .data_a(ioctl_dout), .wren_a(load_cpu),
+    .clock_a(clk), .address_a({load_cpuh, ioctl_addr[14:0]}), .data_a(ioctl_dout), .wren_a(load_cpu | load_cpuh),
     .clock_b(clk), .address_b(rom_a), .q_b(rom_d)
+);
+
+// Braze kit 93C46, 128 x 8 (jotego jt9346). Second port: FF fill during the index 0 load, then the MRA NVRAM
+// image (index 4) / save.
+// jt9346 is used unmodified. It takes a start bit only as DI going 0 -> 1 between two clocks, but the Braze kits clock
+// their reads with DI held at 1, so the next command's start bit (DI = 1 again) would be missed. On each CS rising edge
+// this wrapper clocks one 0 in first; a 93C46 ignores 0s before the start bit (datasheet; MAME eepromser).
+// DO reads 1 while CS is low (open output with a pull-up, as MAME eepromser).
+logic dk_eep_cs, dk_eep_clk, dk_eep_di, dk3_eep_cs, dk3_eep_clk, dk3_eep_di, eep_sdo;
+wire  eep_cs   = is_dk3 ? dk3_eep_cs : dk_eep_cs;
+wire  eep_do   = eep_cs ? eep_sdo : 1'b1;
+wire  eep_fill = ioctl_wr0 && ioctl_addr[24:7] == 18'd0;
+logic       eep_cs_q = 1'b0;
+logic [1:0] eep_pre  = 2'd0;            // 2: clock low, DI 0; 1: clock high, DI 0 (the leading 0); 0: CPU pins
+always_ff @(posedge clk) begin
+    eep_cs_q <= eep_cs;
+    if (eep_cs && !eep_cs_q) eep_pre <= 2'd2;
+    else if (eep_pre != 2'd0) eep_pre <= eep_pre - 2'd1;
+end
+wire  eep_sclk = eep_pre == 2'd0 ? (is_dk3 ? dk3_eep_clk : dk_eep_clk) : eep_pre == 2'd1;
+wire  eep_sdi  = eep_pre == 2'd0 ? (is_dk3 ? dk3_eep_di  : dk_eep_di)  : 1'b0;
+jt9346 #(.AW(7), .CW(7), .DW(8)) eeprom
+(
+    .rst(reset), .clk(clk),
+    .sclk(eep_sclk), .sdi(eep_sdi), .sdo(eep_sdo),
+    .scs(eep_cs),
+    .dump_clk(clk), .dump_addr(eep_fill ? ioctl_addr[6:0] : nv_addr), .dump_we(eep_fill | nv_we),
+    .dump_din(eep_fill ? 8'hFF : nv_din), .dump_dout(nv_dout),
+    .dump_clr(1'b0), .dump_flag()
 );
 
 // sound ROM: port A = 8035 program once the download is over, port B = MOVX data
@@ -280,8 +339,12 @@ assign hs_data_out  = is_dk3 ? dk3_hs_out : is_pop ? pop_hs_out : is_mar ? mar_h
 dkong_board dkong
 (
     .clk(clk), .reset(reset | is_dk3 | is_pop | is_mar | is_sfb | is_n80), .pause(pause), .crt_flip(crt_flip), .jr(variant == 8'd1), .radar(is_rs),
+    .rom_dec(rom_dec),
     .z80pa_0_i(dk_z80pa_0_i), .z80pa_0_o(z80pa_0_o), .mcs48_0_i(dk_mcs48_0_i), .mcs48_0_o(mcs48_0_o),
-    .in0(in0), .in1(in1), .in2(in2), .dsw0(dsw0), .in2_snd_status(game_flags2[0]),
+    // CONV-2026-10-26: original below
+    // .in0(in0), .in1(in1), .in2(in2), .dsw0(dsw0), .in2_snd_status(game_flags2[0]),
+    .in0(in0), .in1(in1), .in2(in2), .dsw0(dsw0), .dsw1(dsw1), .in2_snd_status(game_flags2[0]), .spr256(game_flags2[2]), .gfx1_8k(game_flags2[3]), .dial0(dial0), .dial1(dial1),
+    .eep_cs(dk_eep_cs), .eep_clk(dk_eep_clk), .eep_di(dk_eep_di), .eep_do(eep_do),
     .rom_a(dk_rom_a), .rom_d(rom_d), .snd_pa(dk_snd_pa), .snd_pd(snd_pd), .snd_xa(dk_snd_xa), .snd_xd(snd_xd),
     .gfx1_a(dk_gfx1_a), .gfx1_d(gfx1_d), .gfx2_a(dk_gfx2_a), .gfx2_d(gfx2_d),
     .pal_a(dk_pal_a), .prom_lo_d(prom_lo_q), .prom_hi_d(prom_hi_q), .cc_a(dk_cc_a), .prom_cc_d(prom_cc_q[3:0]),
@@ -296,6 +359,7 @@ dkong_board dkong
 dkong3_board dkong3
 (
     .clk(clk), .reset(reset | ~is_dk3), .pause(pause), .crt_flip(crt_flip),
+    .rom_dec(rom_dec), .eep_cs(dk3_eep_cs), .eep_clk(dk3_eep_clk), .eep_di(dk3_eep_di), .eep_do(eep_do),
     .z80pa_0_i(dk3_z80pa_0_i), .z80pa_0_o(z80pa_0_o),
     .t65_0_i(t65_0_i), .t65_0_o(t65_0_o), .t65_1_i(t65_1_i), .t65_1_o(t65_1_o),
     .in0(in0), .in1(in1), .dsw0(dsw0), .dsw1(dsw1),

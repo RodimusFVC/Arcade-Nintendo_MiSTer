@@ -1,0 +1,76 @@
+<misterromdescription>
+    <name>Street Heat (Set 2, Older?)</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Street Heat</series>
+    <year>1985</year>
+    <manufacturer>Epos Corporation</manufacturer>
+    <category>Maze</category>
+
+    <setname>strtheata</setname>
+    <parent>strtheat</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>2-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>3</num_buttons>
+    <buttons names="Fire,Button 2,Button 3,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="01">
+        <dip name="Demo Sounds" bits="0" ids="Off,On"/>
+        <dip name="Lives" bits="1,2" ids="3,4,5,6"/>
+        <dip name="Bonus Life" bits="3,5" ids="10000,20000,30000,40000,50000,60000,70000,80000"/>
+        <dip name="Control type" bits="6" ids="Steering Wheel,Joystick"/>
+        <dip name="Cabinet" bits="7" ids="Upright,Cocktail"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="strtheata.zip|strtheat.zip">
+        <part crc="53982f41" name="u2"/>
+        <part crc="3162419c" name="u3"/>
+        <part repeat="0x4000">00</part>
+        <part crc="4cd17174" name="2716.3h" offset="0x0" length="0x800"/>
+        <part crc="4cd17174" name="2716.3h" offset="0x0" length="0x800"/>
+        <part repeat="0x800">FF</part>
+        <part repeat="0x2800">00</part>
+        <part crc="a8238e9c" name="2716.7c"/>
+        <part crc="71202138" name="2716.7d"/>
+        <part crc="dc7785ac" name="2716.7e"/>
+        <part crc="ede71d86" name="2716.7f"/>
+        <part repeat="0x2000">00</part>
+        <part crc="29e57678" name="2716.3n" offset="0x0" length="0x800"/>
+        <part crc="29e57678" name="2716.3n" offset="0x0" length="0x800"/>
+        <part crc="31171146" name="2716.3p" offset="0x0" length="0x800"/>
+        <part crc="31171146" name="2716.3p" offset="0x0" length="0x800"/>
+        <part crc="1311ba28" name="82s129.2e"/>
+        <part repeat="0x100">00</part>
+        <part crc="18d90d4f" name="82s129.2f"/>
+        <part repeat="0x100">00</part>
+        <part crc="a515d59b" name="82s129.2n"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            00 10 03 0B 00 00 00 01 FF FF 80 80 80 00 80 80
+            04 03 05 06 07 00 00 00 0C 0B 0D 0E 0F 00 00 00
+            16 00 13 14 00 00 00 11 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+            33 0A 01
+        </part>
+    </rom>
+
+    <remark>Street Heat (Set 2, Older?) (Epos Corporation)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

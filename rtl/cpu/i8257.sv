@@ -84,13 +84,31 @@ assign chan = xfer_chan;
 assign busy = (state == S1) || (state == S2) || (state == S3) || (state == S4) || memw || iow;
 
 // register reads
+// I8257RD-2026-10-26: the rd strobe comes at the START of the CPU read and has side effects (status TC bits clear, MSB
+// flip-flop toggles), but the CPU latches data at the END of the cycle, so it read the value after the side effect
+// (Drakton: status 03 read as 00, so its frame DMA never restarted). Now the value at the strobe is held until cs
+// drops, as MAME (value returned, then the side effect). Original below.
+// always_comb begin
+//     if (!a[3]) dout = a[0] ? (msb ? {(rev_rw && ch_mode[a[2:1]] != 2'd0) ? (ch_mode[a[2:1]] == T_WRITE ? 2'b10 : 2'b01)
+//                                                                          : ch_mode[a[2:1]], ch_count[a[2:1]][13:8]}
+//                                   : ch_count[a[2:1]][7:0])
+//                            : (msb ? ch_addr[a[2:1]][15:8] : ch_addr[a[2:1]][7:0]);
+//     else       dout = status;
+// end
+logic [7:0] dout_live, rd_val;
+logic       rd_held = 1'b0;
 always_comb begin
-    if (!a[3]) dout = a[0] ? (msb ? {(rev_rw && ch_mode[a[2:1]] != 2'd0) ? (ch_mode[a[2:1]] == T_WRITE ? 2'b10 : 2'b01)
-                                                                         : ch_mode[a[2:1]], ch_count[a[2:1]][13:8]}
-                                  : ch_count[a[2:1]][7:0])
-                           : (msb ? ch_addr[a[2:1]][15:8] : ch_addr[a[2:1]][7:0]);
-    else       dout = status;
+    if (!a[3]) dout_live = a[0] ? (msb ? {(rev_rw && ch_mode[a[2:1]] != 2'd0) ? (ch_mode[a[2:1]] == T_WRITE ? 2'b10 : 2'b01)
+                                                                              : ch_mode[a[2:1]], ch_count[a[2:1]][13:8]}
+                                       : ch_count[a[2:1]][7:0])
+                                : (msb ? ch_addr[a[2:1]][15:8] : ch_addr[a[2:1]][7:0]);
+    else       dout_live = status;
 end
+always_ff @(posedge clk) begin
+    if (cs && rd)  begin rd_val <= dout_live; rd_held <= 1'b1; end
+    else if (!cs)  rd_held <= 1'b0;
+end
+assign dout = rd_held ? rd_val : dout_live;
 
 always_ff @(posedge clk) begin
     ior <= 1'b0; iow <= 1'b0; memr <= 1'b0; memw <= 1'b0;

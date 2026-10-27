@@ -1,0 +1,74 @@
+<misterromdescription>
+    <name>Drakton</name>
+    <region>World</region>
+    <homebrew>no</homebrew>
+    <bootleg>no</bootleg>
+    <version></version>
+    <alternative></alternative>
+    <platform></platform>
+    <series>Drakton</series>
+    <year>1984</year>
+    <manufacturer>Epos Corporation</manufacturer>
+    <category>Maze</category>
+
+    <setname>drakton</setname>
+    <parent>drakton</parent>
+    <mameversion>0289</mameversion>
+    <rbf>Nintendo</rbf>
+    <about></about>
+
+    <resolution>15kHz</resolution>
+    <rotation>vertical (ccw)</rotation>
+    <flip>yes</flip>
+
+    <players>2 (alternating)</players>
+    <joystick>4-way</joystick>
+    <special_controls></special_controls>
+    <num_buttons>1</num_buttons>
+    <buttons names="Fire,Not Used,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+
+    <switches default="1D">
+        <dip name="Demo Sounds" bits="0" ids="Off,On"/>
+        <dip name="Lives" bits="1,2" ids="3,4,5,6"/>
+        <dip name="Difficulty" bits="3" ids="Easy,Normal"/>
+        <dip name="Bonus Life" bits="4,6" ids="10000,20000,30000,40000,50000,60000,70000,80000"/>
+        <dip name="Cabinet" bits="7" ids="Upright,Cocktail"/>
+    </switches>
+
+    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <rom index="0" md5="none" zip="drakton.zip">
+        <part crc="d9a33205" name="2764.u2"/>
+        <part crc="69583a35" name="2764.u3"/>
+        <part repeat="0x4000">00</part>
+        <part crc="3489a35b" name="2716.3h" offset="0x0" length="0x800"/>
+        <part crc="3489a35b" name="2716.3h" offset="0x0" length="0x800"/>
+        <part repeat="0x800">00</part>
+        <part repeat="0x2800">00</part>
+        <part crc="2925dc2d" name="2716.7c"/>
+        <part crc="bdf6b1b4" name="2716.7d"/>
+        <part crc="4d62e62f" name="2716.7e"/>
+        <part crc="81d200e5" name="2716.7f"/>
+        <part repeat="0x2000">00</part>
+        <part crc="ea0e7f9a" name="2716.3n"/>
+        <part crc="46f51b68" name="2716.3p"/>
+        <part repeat="0x1000">00</part>
+        <part crc="3ff45f76" name="82s126.2e"/>
+        <part repeat="0x100">00</part>
+        <part crc="38f905be" name="82s126.2f"/>
+        <part repeat="0x100">00</part>
+        <part crc="3c343b9b" name="82s126.2n"/>
+    </rom>
+
+    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <rom index="1">
+        <part>
+            00 11 02 01 00 00 00 1D FF FF 80 80 80 00 80 80
+            04 03 01 02 05 00 00 00 0C 0B 09 0A 0D 00 00 00
+            16 00 13 14 00 00 00 11 00 00 00 00 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        </part>
+    </rom>
+
+    <remark>Drakton (DK Conversion) (Epos Corporation)</remark>
+    <mratimestamp>20261017000000</mratimestamp>
+</misterromdescription>

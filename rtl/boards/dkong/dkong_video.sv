@@ -41,6 +41,8 @@ module dkong_video
     input  logic        gfx_bank,       // DK Jr. char bank
     input  logic        gfx1_8k,        // gfx1 planes 0x1000 apart (DK Jr., DK3), else 0x800
     input  logic        dk3,            // DK3: 8-bit sprite codes, 4-bit RGB palette
+    input  logic        spr256,         // 16K sprite ROM on the DK / Jr. board (Up Maguila): 8-bit codes, quarters 0x1000
+                                        // apart (MAME spritelayout is RGN_FRAC of the gfx2 region)
     input  logic        mario,          // Mario Bros.: 6.000 MHz dots, scroll, code colours, 3bpp sprites
     input  logic  [7:0] scroll_y,       // Mario: 7D00 + 17 (0 elsewhere)
     input  logic        crt_flip,       // MiSTer CRT Flip: whole picture turned 180 degrees
@@ -203,9 +205,13 @@ wire [3:0] e_col = mario ? spr_d[11:8]  : spr_d[19:16];
 wire [7:0] sx   = fl ? (sx0 ^ 8'hFF) - 8'd15 : sx0;
 
 assign spr_a  = {sprite_bank, scan_i[6:0]};
-assign gfx2_a = mario ? {d_rd[2:0], s_code[d_i], s_row[d_i]}                         // data one clock later
-              : dk3   ? {1'b0, d_rd[1:0], s_code[d_i], s_row[d_i]}
-                      : {2'b00, d_rd[1:0], s_code[d_i][6:0], s_row[d_i]};
+// CONV-2026-10-26: 16K sprite ROM on the DK / Jr. board takes the DK3 form. Original below.
+// assign gfx2_a = mario ? {d_rd[2:0], s_code[d_i], s_row[d_i]}                         // data one clock later
+//               : dk3   ? {1'b0, d_rd[1:0], s_code[d_i], s_row[d_i]}
+//                       : {2'b00, d_rd[1:0], s_code[d_i][6:0], s_row[d_i]};
+assign gfx2_a = mario          ? {d_rd[2:0], s_code[d_i], s_row[d_i]}                // data one clock later
+              : (dk3 | spr256) ? {1'b0, d_rd[1:0], s_code[d_i], s_row[d_i]}
+                               : {2'b00, d_rd[1:0], s_code[d_i][6:0], s_row[d_i]};
 
 wire [3:0] pj    = s_fx[d_i] ? 4'd15 - d_px[3:0] : d_px[3:0];
 wire [7:0] gp0   = pj[3] ? d_g[1] : d_g[0];
