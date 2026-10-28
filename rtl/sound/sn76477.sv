@@ -52,7 +52,7 @@ localparam logic [31:0] V_CEN     = 32'd43117445;   // 2.57
 localparam logic [31:0] V_CLIP_H  = 32'd58887045;   // 3.51
 localparam logic [31:0] V_CLIP_L  = 32'd11995709;   // 0.715
 
-// MAME out_pos_gain / out_neg_gain (magnitudes x 2^16), index = A/D cap volts x 10
+// output stage positive / negative gain (magnitudes x 2^16), index = A/D cap volts x 10
 localparam logic [16:0] GP [45] = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 655, 1966, 7209, 9830, 12452, 13763, 15073, 17039, 19005,
     20316, 21627, 23593, 24904, 26870, 28180, 30147, 32113, 34079, 35389, 37356, 39322, 40632, 42598, 44564, 45875, 47841,
     49807, 52429, 53740, 55050, 57016, 58982, 60948, 62915, 64225, 65536};
@@ -144,10 +144,6 @@ always_comb begin
         default: mix = 1'b0;
     endcase
 end
-// MULPOOL-2026-10-23: originals (two run-time multipliers by the constant c2p, one by 10)
-// wire  [35:0] idx10 = {4'd0, ad_v} * 36'd10;
-// wire  [48:0] gp    = 49'(GP[gi]) * 49'(c2p);
-// wire  [48:0] gn    = 49'(GN[gi]) * 49'(c2p);
 wire  [35:0] idx10 = ({4'd0, ad_v} << 3) + ({4'd0, ad_v} << 1);
 wire   [5:0] gi    = (idx10[35:24] > 12'd44) ? 6'd44 : 6'(idx10[35:24]);
 logic [31:0] gpc [45], gnc [45];                    // GP / GN x C2P >> 16, folded at elaboration

@@ -5,9 +5,9 @@
 //
 //  ROM images are stored as dumped; these decode on the CPU read path (MRA index 1 byte 2 = rom_dec):
 //    1     init_dkingjr       palette PROMs c-2k / c-2j read inverted (Donkey King Jr., Up Maguila)
-//    2, 3  init_drakton / init_strtheat   Epos PAL10H8 on D0-D7, keyed by a 4-bit counter (MAME drakton_decrypt_rom)
+//    2, 3  init_drakton / init_strtheat   Epos PAL10H8 on D0-D7, keyed by a 4-bit counter
 //    4-6   init_dkonghs / init_dkongx / dkongike / init_dkong3hs   Braze Technologies kit: 64K ROM with
-//          address lines A8-A14 and all data lines swapped by the board layout (MAME braze_decrypt_rom)
+//          address lines A8-A14 and all data lines swapped by the board layout
 //
 //============================================================================
 

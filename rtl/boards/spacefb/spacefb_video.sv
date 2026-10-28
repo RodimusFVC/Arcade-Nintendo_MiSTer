@@ -8,7 +8,7 @@
 //  0x10, VBSTART 0xF0). Sync not traced yet: placed mid-blanking with porches on both sides (Popeye's H layout):
 //    H: active 0-511, front porch 512-527, sync 528-574, back porch 575-639
 //    V: active 16-239, front porch 240-243, sync 244-246, back porch 247-255, 0-15
-//  Objects (MAME draw_objects): object RAM pages x / y / code / attributes, 128 entries per bank (port 0 bit 5),
+//  Objects: object RAM pages x / y / code / attributes, 128 entries per bank (port 0 bit 5),
 //    drawn in entry order, at half the dot clock (2 dots per object pixel, 256 columns):
 //    attr bit 5: bullet, 4 x 4, bullet PROM 4I {code 5-0, row}, dots LSB first from x, set dots only, red (MAME: the
 //      schematic's bullet colour wiring "cannot be right"; pure red as MAME #unverified);
@@ -18,11 +18,11 @@
 //    first row y = ~ram y - 2; flip (port 0 bit 0) mirrors both axes.
 //  Line buffers: two 256 x 8 ({present, bullet, pen}); line L + 1 is built during line L, display reads and clears.
 //    The hardware's per-line list (MB7063 6H / 6G, 64 x 18) is not modelled: MAME's per-frame order is.
-//  Star field (MAME draw_starfield): 17-bit shift register, one shift per dot of the 512 active dots of every line
+//  Star field: 17-bit shift register, one shift per dot of the 512 active dots of every line
 //    except the last dot of line 15 (IC10 delay), power-on value 0x18F89 (MAME's); a star where (sr & 0x1C0FF) is
 //    0x0C0B7 / 0x0C0BB / 0x0C0D7 / 0x0C0DB, pen sr 13-8, shown where no object dot is present. Port 2: contrast R / G /
 //    B (bits 0-2), background red / blue (3 / 4), star field off (7). Not mirrored by flip (as MAME).
-//  Colour: MAME compute_resistor_weights (tools/spacefb_colors.py): R / G 1K / 470 / 220, B 470 / 220, 470 pulldowns.
+//  Colour: resistor weights (tools/spacefb_colors.py): R / G 1K / 470 / 220, B 470 / 220, 470 pulldowns.
 //
 //============================================================================
 

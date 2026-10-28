@@ -4,7 +4,7 @@
 //  Copyright (C) 2026 Rodimus
 //
 //  Main Z80 at 1H (3.072 MHz), 8257 DMA copies sprite data into the object RAM, 8035 sound CPU (dkong_sound.sv).
-//  Memory map (MAME dkong_map / TKG-04 CPU sheet):
+//  Memory map (TKG-04 CPU sheet):
 //    0000-5FFF ROM          6000-6FFF RAM (6000-6BFF on the board)   7000-73FF object RAM (two 0x200 banks)
 //    7400-77FF video RAM    7800-780F 8257
 //    7C00 R IN0 / W sound latch (LS175 3D)     7C80 R IN1
@@ -20,7 +20,7 @@
 //    Donkey King Jr. / Up Maguila: palette PROMs read inverted.
 //    Epos (Drakton, Street Heat): every I/O read steps a 4-bit counter (odd port down, even port up; reads return 00);
 //      counter 8-B selects one of four PAL decodes for 0000-3FFF. Power-up counter 9 (Drakton) / 8 (Street Heat).
-//      Street Heat: 7C00 / 7C80 bits 0-1 = steering dial P1 / P2 while DSW0 bit 6 = 0 (MAME strtheat_inputport_r).
+//      Street Heat: 7C00 / 7C80 bits 0-1 = steering dial P1 / P2 while DSW0 bit 6 = 0 .
 //    Braze kit (64K ROM + 93C46 in the CPU socket): ROM at 0000-5FFF and 8000-FFFF = kit ROM {A15 select, A14-A0};
 //      EEPROM at C000 (C800 on dkongx: bit 0 DI, 1 CLK, 2 CS; read bit 0 = DO); dkongx A15 latch at E000 (data
 //      bit 0), dkongike A15 = OSD Game switch (DSW1 bit 0).
@@ -53,15 +53,13 @@ module dkong_board
     input  logic  [1:0] dial0,          // Street Heat steering dial P1 / P2 (MAME IN4 / IN5)
     input  logic  [1:0] dial1,
 
-    // Braze kit 93C46 (rtl/nintendo_board.sv)
+    // Braze kit 93C46 (rtl/nintendo_dispatcher.sv)
     output logic        eep_cs,
     output logic        eep_clk,
     output logic        eep_di,
     input  logic        eep_do,
 
-    // ROMs (shared blocks in rtl/nintendo_board.sv)
-    // CONV-2026-10-26: 16-bit ROM address (Braze kit ROM 64K). Original below.
-    // output logic [14:0] rom_a,
+    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
     output logic [15:0] rom_a,
     input  logic  [7:0] rom_d,
     output logic [11:0] snd_pa,         // 8035 program
@@ -94,7 +92,15 @@ module dkong_board
     input  logic [15:0] hs_address,
     input  logic  [7:0] hs_data_in,
     output logic  [7:0] hs_data_out,
-    input  logic        hs_write
+    input  logic        hs_write,
+
+    // pooled 8257 DMA (dispatcher)
+    output chip_pool_pkg::i8257_i_t i8257_0_i,
+    input  chip_pool_pkg::i8257_o_t i8257_0_o,
+
+    // board RAM pool (dispatcher, ram_pool_pkg)
+    output ram_pool_pkg::pram_i_t [8:0] pr_i,
+    input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 // ------------------------------------------------------------------ video timing / CPU clock
@@ -125,15 +131,28 @@ logic  [1:0] dma_chan;
 logic        drq;
 wire         dma_cs = cpu_a[15:10] == 6'b011110;                    // 7800-7BFF
 
-i8257 dma
-(
-    .clk(clk), .reset(reset), .ce(cen_p & run), .rev_rw(1'b1),
-    .cs(dma_cs && !busak), .a(cpu_a[3:0]), .wr(cpu_we), .rd(cpu_re), .din(z80pa_0_o.dout), .dout(dma_dout),
-    .drq({2'b00, drq, drq}), .hrq(dma_hrq), .hlda(busak),
-    .addr(dma_a), .chan(dma_chan), .busy(dma_busy), .ior(), .iow(dma_iow), .memr(), .memw(dma_memw),
-    .mem_d(mem_q), .io_d(dma_latch), .data(dma_data)
-);
-always_ff @(posedge clk) if (dma_iow) dma_latch <= dma_data;       // MAME p8257_ctl_w / p8257_ctl_r
+// 8257 DMA: pooled i8257_0 (dispatcher)
+assign i8257_0_i.reset = reset;
+assign i8257_0_i.ce = cen_p & run;
+assign i8257_0_i.rev_rw = 1'b1;
+assign i8257_0_i.cs = dma_cs && !busak;
+assign i8257_0_i.a = cpu_a[3:0];
+assign i8257_0_i.wr = cpu_we;
+assign i8257_0_i.rd = cpu_re;
+assign i8257_0_i.din = z80pa_0_o.dout;
+assign dma_dout = i8257_0_o.dout;
+assign i8257_0_i.drq = {2'b00, drq, drq};
+assign dma_hrq = i8257_0_o.hrq;
+assign i8257_0_i.hlda = busak;
+assign dma_a = i8257_0_o.addr;
+assign dma_chan = i8257_0_o.chan;
+assign dma_busy = i8257_0_o.busy;
+assign dma_iow = i8257_0_o.iow;
+assign dma_memw = i8257_0_o.memw;
+assign i8257_0_i.mem_d = mem_q;
+assign i8257_0_i.io_d = dma_latch;
+assign dma_data = i8257_0_o.data;
+always_ff @(posedge clk) if (dma_iow) dma_latch <= dma_data;       // 8257 I/O channel latch
 
 // ------------------------------------------------------------------ bus (CPU or DMA)
 wire        dma_own = dma_busy & busak;
@@ -152,29 +171,32 @@ logic  [7:0] spr_a;
 logic  [9:0] vram_va;
 logic  [7:0] vram_vd;
 
-dpram_dc #(.widthad_a(12)) ram
-(
-    .clock_a(clk), .address_a(bus_a[11:0]), .data_a(bus_d), .wren_a(bus_we & sel_ram), .q_a(ram_q),
-    .clock_b(clk), .address_b(hs_address[11:0]), .data_b(hs_data_in), .wren_b(hs_write & pause), .q_b(hs_data_out)
-);
+assign pr_i[6] = '0;
+assign pr_i[7] = '0;
+assign pr_i[8] = '0;
 
-dpram_dc #(.widthad_a(10)) vram
-(
-    .clock_a(clk), .address_a(bus_a[9:0]), .data_a(bus_d), .wren_a(bus_we & sel_vram), .q_a(vram_q),
-    .clock_b(clk), .address_b(vram_va), .q_b(vram_vd)
-);
+// work RAM: pool block 0 (port B = hiscore)
+assign pr_i[0].a_addr = {3'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
+assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign ram_q = pr_o[0].a_q;
+assign hs_data_out = pr_o[0].b_q;
+
+// video RAM: pool block 1 (port B = tilemap)
+assign pr_i[1].a_addr = {5'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
+assign pr_i[1].b_addr = {5'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
+assign vram_q = pr_o[1].a_q;
+assign vram_vd = pr_o[1].b_q;
 
 // object RAM as four byte lanes: one 32-bit sprite entry per video read
 logic [7:0] obj_lane_q[4];
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : objl
-        dpram_dc #(.widthad_a(8)) obj
-        (
-            .clock_a(clk), .address_a(bus_a[9:2]), .data_a(bus_d), .wren_a(bus_we & sel_obj & (bus_a[1:0] == ln)),
-            .q_a(obj_lane_q[ln]),
-            .clock_b(clk), .address_b(spr_a), .q_b(spr_d[ln*8 +: 8])
-        );
+        // object RAM lane ln: pool block 2 + ln (port B = sprite engine)
+        assign pr_i[2 + ln].a_addr = {7'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
+        assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
+        assign obj_lane_q[ln] = pr_o[2 + ln].a_q;
+        assign spr_d[ln*8 +: 8] = pr_o[2 + ln].b_q;
     end
 endgenerate
 logic [1:0] obj_lane;
@@ -265,9 +287,6 @@ end
 // ------------------------------------------------------------------ CPU read data
 logic       snd_status;
 logic [7:0] io_q;
-// CONV-2026-10-26: Street Heat steering dial on bits 0-1 in wheel mode. Original IN0 / IN1 rows below.
-//         2'd0: io_q = in0;
-//         2'd1: io_q = in1;
 wire wheel = strtheat && !dsw0[6];
 always_comb begin
     case (cpu_a[8:7])
@@ -278,8 +297,6 @@ always_comb begin
     endcase
 end
 
-// CONV-2026-10-26: kit ROM address / data decode. Original below.
-// assign rom_a = cpu_a[14:0];
 assign rom_a = braze ? dkong_kits_pkg::braze_addr({brz_sel15, cpu_a[14:0]}) : {1'b0, cpu_a[14:0]};
 wire  sel_rom = cpu_a < 16'h6000 || (braze && cpu_a[15]);
 logic [7:0] rom_q;
@@ -289,17 +306,6 @@ always_comb begin
     else                               rom_q = rom_d;
 end
 
-// CONV-2026-10-26: Epos I/O reads return 00, Braze EEPROM, kit ROM windows. Original below.
-// always_comb begin
-//     if (cpu_a < 16'h6000)      z80pa_0_i.di = rom_d;
-//     else if (sel_ram)   z80pa_0_i.di = ram_q;
-//     else if (sel_obj)   z80pa_0_i.di = obj_q;
-//     else if (sel_vram)  z80pa_0_i.di = vram_q;
-//     else if (dma_cs)    z80pa_0_i.di = dma_dout;
-//     else if (sel_io)    z80pa_0_i.di = io_q;
-//     else                z80pa_0_i.di = 8'hFF;
-// end
-// assign mem_q = sel_ram ? ram_q : sel_obj ? obj_q : sel_vram ? vram_q : (bus_a < 16'h6000) ? rom_d : 8'hFF;
 always_comb begin
     if (epos && iorq && !m1)   z80pa_0_i.di = 8'h00;
     else if (sel_eep)   z80pa_0_i.di = {7'd0, eep_do};
@@ -326,16 +332,12 @@ assign z80pa_0_i.busrq_n = ~dma_hrq;
 dkong_video video
 (
     .clk(clk), .reset(reset),
-    // CONV-2026-10-26: char plane spacing / sprite ROM size follow the set's MAME region size. Original below.
-    // .flip(flip), .sprite_bank(spr_bank), .palette_bank(pal_bank), .gfx_bank(jr & lat_4h[0]), .gfx1_8k(jr), .dk3(1'b0), .mario(1'b0), .scroll_y(8'd0), .crt_flip(crt_flip),
     .flip(flip), .sprite_bank(spr_bank), .palette_bank(pal_bank), .gfx_bank(jr & lat_4h[0]), .gfx1_8k(jr | gfx1_8k), .dk3(1'b0), .spr256(spr256), .mario(1'b0), .scroll_y(8'd0), .crt_flip(crt_flip),
     .radar(radar), .rs_snd2(lat_6h[2]), .rs_grid_on(lat_5h[1]), .rs_grid_col(grid_col), .rs_ans(mcs48_0_o.p2[5]),
     .gfx3_a(gfx3_a), .gfx3_d(gfx3_d),
     .ce_pix(ce_pix), .cpu_cen_p(cen_p), .cpu_cen_n(cen_n), .vram_busy(vram_busy), .vblank_hw(vblk),
     .vram_a(vram_va), .vram_d(vram_vd), .spr_a(spr_a), .spr_d(spr_d),
     .gfx1_a(gfx1_a), .gfx1_d(gfx1_d), .gfx2_a(gfx2_a), .gfx2_d(gfx2_d),
-    // CONV-2026-10-26: Donkey King Jr. / Up Maguila palette PROMs read inverted (init_dkingjr). Original below.
-    // .cprom_a(cc_a), .cprom_d(prom_cc_d), .pal_a(pal_a), .pal_lo_d(prom_lo_d), .pal_hi_d(prom_hi_d),
     .cprom_a(cc_a), .cprom_d(prom_cc_d), .pal_a(pal_a),
     .pal_lo_d(dkingjr ? ~prom_lo_d : prom_lo_d), .pal_hi_d(dkingjr ? ~prom_hi_d : prom_hi_d),
     .r(video_r), .g(video_g), .b(video_b), .hblank(video_hblank), .vblank(video_vblank), .hsync(video_hs), .vsync(video_vs)

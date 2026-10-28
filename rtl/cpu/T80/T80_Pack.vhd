@@ -70,7 +70,7 @@ package T80_Pack is
 
 	component T80
 	generic(
-		Mode_g : integer := 0;    -- 0 => Z80, 1 => Fast Z80, 2 => 8080, 3 => GB
+		Mode : integer := 0;    -- 0 => Z80, 1 => Fast Z80, 2 => 8080, 3 => GB
 		IOWait : integer := 0;  -- 1 => Single cycle I/O, 1 => Std I/O cycle
 		Flag_C : integer := 0;
 		Flag_N : integer := 1;
@@ -82,7 +82,6 @@ package T80_Pack is
 		Flag_S : integer := 7
 	);
 	port(
-		I8080  : in  std_logic := '0';  -- runtime 8080 mode (on a Mode_g = 0 build: Mode = 2 while high)
 		RESET_n         : in std_logic;
 		CLK_n           : in std_logic;
 		CEN             : in std_logic;
@@ -139,7 +138,7 @@ package T80_Pack is
 
 	component T80_MCode
 	generic(
-		Mode_g   : integer := 0;
+		Mode   : integer := 0;
 		Flag_C : integer := 0;
 		Flag_N : integer := 1;
 		Flag_P : integer := 2;
@@ -150,7 +149,6 @@ package T80_Pack is
 		Flag_S : integer := 7
 	);
 	port(
-		I8080  : in  std_logic := '0';  -- runtime 8080 mode (on a Mode_g = 0 build: Mode = 2 while high)
 		IR                      : in  std_logic_vector(7 downto 0);
 		ISet                    : in  std_logic_vector(1 downto 0);
 		MCycle                  : in  std_logic_vector(2 downto 0);
@@ -220,7 +218,7 @@ package T80_Pack is
 
 	component T80_ALU
 	generic(
-		Mode_g   : integer := 0;
+		Mode   : integer := 0;
 		Flag_C : integer := 0;
 		Flag_N : integer := 1;
 		Flag_P : integer := 2;
@@ -231,7 +229,6 @@ package T80_Pack is
 		Flag_S : integer := 7
 	);
 	port(
-		I8080  : in  std_logic := '0';  -- runtime 8080 mode (on a Mode_g = 0 build: Mode = 2 while high)
 		Arith16         : in  std_logic;
 		Z16             : in  std_logic;
 		WZ              : in  std_logic_vector(15 downto 0);

@@ -1,6 +1,6 @@
 //============================================================================
 //
-//  Nintendo Donkey Kong sound board (TKG-04 CPU sheet; MAME dkong_a.cpp dkong2b_audio)
+//  Nintendo Donkey Kong sound board (TKG-04 CPU sheet; reference MAME dkong_a.cpp)
 //  Copyright (C) 2026 Rodimus
 //
 //  8035 (MB8884 7H, 6 MHz): program 0x000-0xFFF; MOVX reads the tune latch (P2.6 high: LS175 3D, inverted low
@@ -14,7 +14,7 @@
 //    -> mix (4 x 47K, C159 100n, C12 1u) -> Q3 amp -> output coupling. MAME's model except: emitter followers are
 //    ideal (charge to Vb - 0.7), 555s flip at the sample, Q3 = linear -8.4 x with the 0-5 V swing (MAME's 48 kHz
 //    transistor step rolls off the treble: gain 2.3 at 3 kHz vs 8.4 in its own model at 768 kHz).
-//  Radar Scope (rs, TRS2-03 / 04-SOU sheet, Radar_Scope_Schematics.pdf p11; network as MAME radarscp_discrete with the
+//  Radar Scope (rs, TRS2-03 / 04-SOU sheet, Radar_Scope_Schematics.pdf p11; network as MAME's discrete model with the
 //    sheet's values where MAME differs: SOUND0 C22 load 10K, R27 10K, R9 10K, CV networks R55 / R60 at the mid node;
 //    model: dksnd/radarscp_discrete.py, constants: dksnd/gen_rs_consts.py, in the verilator dir): same
 //    8035 / DAC (VR2 0.35); SOUND2 / SOUND1 (6H Q2 / Q1) = the stomp form on noise QC / QB of a 4-bit LS161 cleared
@@ -77,7 +77,7 @@ assign mcs48_0_i.int_n   = ~irq;
 assign mcs48_0_i.t0      = ~sfx[5];
 assign mcs48_0_i.t1      = ~sfx[4];
 assign mcs48_0_i.p1_in   = 8'hFF;
-// MAME virtual_p2: DK P2.5 = 6H Q3 inverted; DK Jr. P2.6 / 5 / 4 = 4H Q1 / 6H Q3 / 6H Q6, inverted
+// P2 inputs: DK P2.5 = 6H Q3 inverted; DK Jr. P2.6 / 5 / 4 = 4H Q1 / 6H Q3 / 6H Q6, inverted
 assign mcs48_0_i.p2_in   = jr ? {p2[7], ~lat4h1, ~sfx[3], ~sfx[6], p2[3:0]} : {p2[7:6], ~sfx[3], p2[4:0]};
 assign mcs48_0_i.db      = jr ? {3'b000, tune[4:0]} : p2[6] ? {4'h0, ~tune[3:0]} : xd;
 assign mcs48_0_i.pmem_d  = pd;
@@ -102,7 +102,7 @@ localparam logic signed [31:0] V5_1   = 32'sd85563802;
 localparam logic signed [31:0] Q1     = 32'sd1073741824;              // 1.0 in Q2.30
 localparam logic signed [31:0] V5_256 = 32'sd327680;                  // DAC: 5 V / 256 per step
 localparam logic signed [31:0] K_ENV  = 32'sd1073685901;              // exp(-dt / 0.1 s): R20 C32
-// Sallen-Key 1916 Hz, Q 0.7416, bilinear with pre-warp (MAME calculate_filter2_coefficients)
+// Sallen-Key 1916 Hz, Q 0.7416, bilinear with pre-warp 
 localparam logic signed [31:0] SK_B0  = 32'sd1012338;
 localparam logic signed [31:0] SK_B1  = 32'sd2024675;
 localparam logic signed [31:0] SK_A1  = 32'sd2056385588;              // -a1
@@ -134,7 +134,7 @@ localparam logic signed [31:0] A_CAMP = 32'sd55923, A_AMPHP = 32'sd1930858, A_CR
 localparam logic signed [31:0] K_AMP  = -32'sd563714457;              // -8.4 / 16 (result shifted left 4)
 localparam logic signed [31:0] K_OUT  = 32'sd1287168;                 // 20112 / 2^24 in Q2.30 terms
 localparam logic signed [31:0] K_TFIDX = 32'sd332188877;              // 99 / 5 / 64
-// DK Jr. mixer (MAME dkongjr_mixer_desc, but R3 walk / land = 150K per DKJr.pdf p31; MAME 100K): 150K fall, 150K walk,
+// DK Jr. mixer (R3 walk / land = 150K per DKJr.pdf p31; MAME uses 100K): 150K fall, 150K walk,
 // 20K climb, 47K jump, 47K DAC; C155 0.01u, C161 1u;
 // C13 coupling into 1K; 32767 / 1.18 * 0.5 per volt
 localparam logic signed [31:0] JK_S9 = 32'sd67603303, JK_S0 = 32'sd67603303, JK_S2 = 32'sd507024773, JK_S1 = 32'sd215755223;
@@ -299,7 +299,7 @@ localparam logic signed [31:0] RS_CRO    = 32'sd169453;   // output CR 1K / 33u
 localparam logic signed [31:0] RS_VR2    = 32'sd375809638;   // MAME VR2 default 35
 localparam logic signed [31:0] RS_OUT    = 32'sd880777;   // 32767 / 5 x 3 x 0.7 (MAME route) / 2^24 in Q2.30 terms
 
-// CD4049 transfer (MAME dss_inverter_osc tftab, DEFAULT_CD40XX_VALUES(5)), 100 entries over 0-5 V: tf_tab below
+// CD4049 transfer (CD40xx at 5 V), 100 entries over 0-5 V: tf_tab below
 
 function automatic logic signed [31:0] vmax(input logic signed [31:0] a, input logic signed [31:0] b);
     vmax = (a > b) ? a : b;
@@ -454,7 +454,7 @@ logic               os_walk_on, os_jump_on, os_climb_on, os_walk_l, os_jump_l, o
 logic         [3:0] rcnt;                                              // Radar Scope 3J (4 bits, cleared by 6H Q6 low)
 logic signed [31:0] t_dac;                                             // DAC x VR2 (slot 69)
 
-// LS123 one-shot step (MAME dst_oneshot, retriggerable, rising edge; widths in samples) -> {count, on, last trigger}
+// LS123 one-shot step (retriggerable, rising edge; widths in samples) -> {count, on, last trigger}
 function automatic logic [17:0] os_next(input logic [15:0] cnt, input logic on, input logic last, input logic trig,
                                         input logic [15:0] w);
     logic count;

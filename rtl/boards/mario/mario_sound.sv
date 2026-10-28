@@ -1,6 +1,6 @@
 //============================================================================
 //
-//  Nintendo Mario Bros. sound (TMA1-CPU sheet, sound quarter; MAME mario.cpp mario_state + nl_mario.cpp)
+//  Nintendo Mario Bros. sound (TMA1-CPU sheet, sound quarter; reference MAME mario.cpp + nl_mario.cpp)
 //  Copyright (C) 2026 Rodimus
 //
 //  Sound CPU M58715 5L (8039 family, X2 11 MHz) = the pooled T48 (mcs48_0). Its 2K internal ROM is not dumped; as
@@ -42,7 +42,7 @@ module mario_sound
 
     output logic signed [15:0] audio,
 
-    // MULPOOL-2026-10-23: the dispatcher's shared multiplier (rtl/nintendo_board.sv): a / b in clock t, product in t + 2
+    // the dispatcher's shared multiplier (rtl/nintendo_dispatcher.sv): a / b in clock t, product in t + 2
     output logic signed [39:0] mul_a,
     output logic signed [26:0] mul_b,
     input  logic signed [66:0] mul_p
@@ -102,50 +102,8 @@ localparam signed [17:0] A2 = 18'sd14117;   // MFB pole 7411 Hz
 localparam signed [17:0] A3 = 18'sd2209;    // mix node C31, 1048 Hz
 
 
-// MULPOOL-2026-10-23: original analog arithmetic below
-// logic signed [31:0] f1 = 32'sd0, f2 = 32'sd0, f3 = 32'sd0, h1 = 32'sd0, h2 = 32'sd0;
-// // output coupling: two one-pole high-passes, y = x - lowpass(x); a = 1 - exp(-1 / (192 kHz x tau)) x 2^24
-// wire  signed [31:0] y1 = f3 - h1;
-// wire  signed [49:0] m4 = 50'(33'(f3) - 33'(h1)) * 50'sd2906;      // tau 30.1 ms
-// wire  signed [49:0] m5 = 50'(33'(y1) - 33'(h2)) * 50'sd1859;      // tau 47 ms
-//
-// // discrete voices into the mix node: a TTL output through 22K, 1/256 of a sample high = 90440 (skid through 100K:
-// // x 22K / 100K = 19897). Calibrated on MAME's isolated captures (verilator/mariosnd: envelope corr 0.99 / 0.96 /
-// // 0.97): an ideal 3.4 V high would be 2^17; x 0.69 brings the three voices to MAME's level on average (effective
-// // V_OH ~2.35 V into the network; MAME's gate-on / gate-off steps are asymmetric, the per-voice ratio stays 0.8-1.2)
-// logic [8:0] lvl0, lvl1, lvl7;
-// mario_discrete disc
-// (
-//     .clk(clk), .reset(reset), .run(!pause), .step(step), .walk0(walk0), .walk1(walk1), .sound7(sound7),
-//     .lvl0(lvl0), .lvl1(lvl1), .lvl7(lvl7)
-// );
-// wire signed [31:0] mix = f2 + $signed(32'({1'b0, lvl0} + {1'b0, lvl1}) * 32'sd90440) + $signed(32'(lvl7) * 32'sd19897);
-//
-// wire  signed [31:0] x0 = {8'd0, dac, 16'd0};
-// // differences first at 33 bits, then a full-width signed product (operands sized before the multiply)
-// wire  signed [32:0] d1 = 33'(x0) - 33'(f1), d2 = 33'(f1) - 33'(f2), d3 = 33'(mix) - 33'(f3);
-// wire  signed [49:0] m1 = 50'(d1) * 50'(A1);
-// wire  signed [49:0] m2 = 50'(d2) * 50'(A2);
-// wire  signed [49:0] m3 = 50'(d3) * 50'(A3);
-// always_ff @(posedge clk) begin
-//     if (reset) begin f1 <= 32'sd0; f2 <= 32'sd0; f3 <= 32'sd0; h1 <= 32'sd0; h2 <= 32'sd0; end
-//     else if (step) begin
-//         f1 <= f1 + 32'(m1 >>> 16);
-//         f2 <= f2 + 32'(m2 >>> 16);
-//         f3 <= f3 + 32'(m3 >>> 16);
-//         h1 <= h1 + 32'(m4 >>> 24);                      // C32 coupling (30 ms)
-//         h2 <= h2 + 32'(m5 >>> 24);                      // C47 coupling (47 ms)
-//     end
-// end
-//
-// // output: AC part x 28 / 2^14 (DAC full scale 256 << 16): gameplay f200-1150 RMS = MAME's (verilator/mariosnd
-// // tb_mariocpu on MAME's write timeline; x 41 was 1.46 x MAME across music, run, jump and walk)
-// wire signed [31:0] ac = y1 - h2;
-// wire signed [39:0] a28 = 40'(ac) * 40'sd28;
-// wire signed [23:0] o  = 24'(a28 >>> 14);
-// assign audio = (o > 24'sd32767) ? 16'sd32767 : (o < -24'sd32768) ? -16'sd32768 : o[15:0];
 
-// MULPOOL-2026-10-23: same math; state products from the shared multiplier (issued between steps, same product bits),
+// same math; state products from the shared multiplier (issued between steps, same product bits),
 // the DAC term and the output x 28 as shift-adds (they see inputs / state that change at any clock)
 logic signed [31:0] f1 = 32'sd0, f2 = 32'sd0, f3 = 32'sd0, h1 = 32'sd0, h2 = 32'sd0;
 wire  signed [31:0] y1 = f3 - h1;

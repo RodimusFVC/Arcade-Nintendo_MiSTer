@@ -84,7 +84,7 @@ use work.T80_Pack.all;
 
 entity T80 is
 	generic(
-		Mode_g   : integer := 0;  -- 0 => Z80, 1 => Fast Z80, 2 => 8080, 3 => GB
+		Mode   : integer := 0;  -- 0 => Z80, 1 => Fast Z80, 2 => 8080, 3 => GB
 		IOWait : integer := 0;  -- 0 => Single cycle I/O, 1 => Std I/O cycle
 		Flag_C : integer := 0;
 		Flag_N : integer := 1;
@@ -96,7 +96,6 @@ entity T80 is
 		Flag_S : integer := 7
 	);
 	port(
-		I8080  : in  std_logic := '0';  -- runtime 8080 mode (on a Mode_g = 0 build: Mode = 2 while high)
 		RESET_n    : in  std_logic;
 		CLK_n      : in  std_logic;
 		CEN        : in  std_logic;
@@ -130,8 +129,6 @@ entity T80 is
 end T80;
 
 architecture rtl of T80 is
-
-	signal Mode : integer range 0 to 3;   -- Mode_g, or 2 (8080) while I8080 = 1 on a Mode_g = 0 build
 
 	-- Registers
 	signal ACC, F               : std_logic_vector(7 downto 0);
@@ -266,7 +263,6 @@ architecture rtl of T80 is
 	signal DOR                  : std_logic_vector(127 downto 0);
 
 begin
-	Mode <= 2 when I8080 = '1' and Mode_g = 0 else Mode_g;
 
 	REG <= IntE_FF2 & IntE_FF1 & IStatus & DOR & std_logic_vector(PC) & std_logic_vector(SP) & std_logic_vector(R) & I & Fp & Ap & F & ACC when Alternate = '0'
 			 else IntE_FF2 & IntE_FF1 & IStatus & DOR(127 downto 112) & DOR(47 downto 0) & DOR(63 downto 48) & DOR(111 downto 64) &
@@ -274,7 +270,7 @@ begin
 
 	mcode : T80_MCode
 		generic map(
-			Mode_g => Mode_g,
+			Mode   => Mode,
 			Flag_C => Flag_C,
 			Flag_N => Flag_N,
 			Flag_P => Flag_P,
@@ -284,7 +280,6 @@ begin
 			Flag_Z => Flag_Z,
 			Flag_S => Flag_S)
 		port map(
-			I8080  => I8080,
 			IR          => IR,
 			ISet        => ISet,
 			MCycle      => MCycle,
@@ -351,7 +346,7 @@ begin
 
 	alu : T80_ALU
 		generic map(
-			Mode_g => Mode_g,
+			Mode   => Mode,
 			Flag_C => Flag_C,
 			Flag_N => Flag_N,
 			Flag_P => Flag_P,
@@ -361,7 +356,6 @@ begin
 			Flag_Z => Flag_Z,
 			Flag_S => Flag_S)
 		port map(
-			I8080  => I8080,
 			Arith16 => Arith16_r,
 			Z16     => Z16_r,
 			WZ      => WZ,

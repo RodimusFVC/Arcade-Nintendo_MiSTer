@@ -5,7 +5,7 @@
 //
 //  Main Z80 at 4 MHz from its own 8 MHz crystal (LS74 3H / 2; DKC1-CPU sheet), not the video's 1H. A Z80 DMA
 //  (z80dma.sv, same 4 MHz clock) copies the sprite list 6900 -> 7000 every frame (burst, 0x1A0 bytes, RDY = 7E85).
-//  Memory map (MAME dkong3_map):
+//  Memory map:
 //    0000-5FFF ROM   6000-6FFF RAM   7000-73FF object RAM (two 0x200 banks)   7400-77FF video RAM   8000-9FFF ROM
 //    7C00 R IN0 / W sound latch 1   7C80 R IN1 / W sound latch 2   7D00 R DSW0 / W sound latch 3
 //    7D80 R DSW1 / W bit 0 = 2A03 reset (low = held)
@@ -17,7 +17,7 @@
 //    held in reset while 7D80 bit 0 = 0. Each: 0000-07FF RAM (mirrored to 7FFF), 8000-9FFF ROM (mirrored to FFFF),
 //    $4016 / $4017 = sound latch 1 / 2 (#1), latch 3 / none (#2). AUX A / B of both chips (100 Ohm pad loads) are
 //    summed with equal weights into the LM3900 chain (6P; mixing resistors not legible on the 150 dpi scan), DC-blocked.
-//  Braze kit (dkong3hs, rom_dec 4; MAME init_dkong3hs): kit ROM 64K at 0000-5FFF and 8000-FFFF (straight, decoded by
+//  Braze kit (dkong3hs, rom_dec 4): kit ROM 64K at 0000-5FFF and 8000-FFFF (straight, decoded by
 //    dkong_kits_pkg), 93C46 at C000 (write bit 0 DI, 1 CLK, 2 CS; read bit 0 = DO).
 //
 //============================================================================
@@ -30,7 +30,7 @@ module dkong3_board
     input  logic        crt_flip,
     input  logic  [3:0] rom_dec,        // conversion kit (dkong_kits_pkg), 0 = none
 
-    // Braze kit 93C46 (rtl/nintendo_board.sv)
+    // Braze kit 93C46 (rtl/nintendo_dispatcher.sv)
     output logic        eep_cs,
     output logic        eep_clk,
     output logic        eep_di,
@@ -48,9 +48,7 @@ module dkong3_board
     input  logic  [7:0] dsw0,
     input  logic  [7:0] dsw1,
 
-    // ROMs (shared blocks in rtl/nintendo_board.sv)
-    // CONV-2026-10-26: 16-bit ROM address (Braze kit ROM 64K). Original below.
-    // output logic [14:0] rom_a,          // 8000-9FFF read at ROM 6000 (MRA placement)
+    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
     output logic [15:0] rom_a,          // 8000-9FFF read at ROM 6000 (MRA placement)
     input  logic  [7:0] rom_d,
     output logic [12:0] snd1_a,         // 2A03 #1 ROM (soundcpu slot)
@@ -81,7 +79,15 @@ module dkong3_board
     input  logic [15:0] hs_address,
     input  logic  [7:0] hs_data_in,
     output logic  [7:0] hs_data_out,
-    input  logic        hs_write
+    input  logic        hs_write,
+
+    // pooled Z80 DMA (dispatcher)
+    output chip_pool_pkg::z80dma_i_t z80dma_0_i,
+    input  chip_pool_pkg::z80dma_o_t z80dma_0_o,
+
+    // board RAM pool (dispatcher, ram_pool_pkg)
+    output ram_pool_pkg::pram_i_t [8:0] pr_i,
+    input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
@@ -125,13 +131,23 @@ logic        dma_busrq, dma_busy, dma_mreq, dma_memw;
 logic        dma_rdy;
 wire         dma_cs = iorq && !m1 && cpu_a[7:0] == 8'h00 && !busak;
 
-z80dma dma
-(
-    .clk(clk), .reset(reset), .cen_p(cen_p & run),
-    .cs(dma_cs), .wr(io_we), .rd(io_re), .din(z80pa_0_o.dout), .dout(dma_dout),
-    .rdy(dma_rdy), .busrq(dma_busrq), .bai(busak),
-    .busy(dma_busy), .addr(dma_a), .mreq(dma_mreq), .iorq(), .memr(), .memw_s(dma_memw), .bus_d(mem_q), .data(dma_data)
-);
+// Z80 DMA: pooled z80dma_0 (dispatcher)
+assign z80dma_0_i.reset = reset;
+assign z80dma_0_i.cen_p = cen_p & run;
+assign z80dma_0_i.cs = dma_cs;
+assign z80dma_0_i.wr = io_we;
+assign z80dma_0_i.rd = io_re;
+assign z80dma_0_i.din = z80pa_0_o.dout;
+assign dma_dout = z80dma_0_o.dout;
+assign z80dma_0_i.rdy = dma_rdy;
+assign dma_busrq = z80dma_0_o.busrq;
+assign z80dma_0_i.bai = busak;
+assign dma_busy = z80dma_0_o.busy;
+assign dma_a = z80dma_0_o.addr;
+assign dma_mreq = z80dma_0_o.mreq;
+assign dma_memw = z80dma_0_o.memw_s;
+assign z80dma_0_i.bus_d = mem_q;
+assign dma_data = z80dma_0_o.data;
 
 // ------------------------------------------------------------------ bus (CPU or DMA)
 wire        dma_own = dma_busy & busak;
@@ -139,8 +155,6 @@ wire [15:0] bus_a   = dma_own ? dma_a : cpu_a;
 wire        bus_we  = dma_own ? dma_memw & dma_mreq : cpu_we;
 wire  [7:0] bus_d   = dma_own ? dma_data : z80pa_0_o.dout;
 
-// CONV-2026-10-26: Braze kit ROM also at A000-FFFF. Original below.
-// wire sel_rom  = bus_a < 16'h6000 || bus_a[15:13] == 3'b100;           // 0000-5FFF, 8000-9FFF
 wire sel_rom  = bus_a < 16'h6000 || bus_a[15:13] == 3'b100 || (braze && bus_a[15]);   // 0000-5FFF, 8000-9FFF
 wire sel_ram  = bus_a[15:12] == 4'h6;
 wire sel_obj  = bus_a[15:10] == 6'b011100;                         // 7000-73FF
@@ -153,29 +167,30 @@ logic  [7:0] spr_a;
 logic  [9:0] vram_va;
 logic  [7:0] vram_vd;
 
-dpram_dc #(.widthad_a(12)) ram
-(
-    .clock_a(clk), .address_a(bus_a[11:0]), .data_a(bus_d), .wren_a(bus_we & sel_ram), .q_a(ram_q),
-    .clock_b(clk), .address_b(hs_address[11:0]), .data_b(hs_data_in), .wren_b(hs_write & pause), .q_b(hs_data_out)
-);
+assign pr_i[8] = '0;
 
-dpram_dc #(.widthad_a(10)) vram
-(
-    .clock_a(clk), .address_a(bus_a[9:0]), .data_a(bus_d), .wren_a(bus_we & sel_vram), .q_a(vram_q),
-    .clock_b(clk), .address_b(vram_va), .q_b(vram_vd)
-);
+// work RAM: pool block 0 (port B = hiscore)
+assign pr_i[0].a_addr = {3'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
+assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign ram_q = pr_o[0].a_q;
+assign hs_data_out = pr_o[0].b_q;
+
+// video RAM: pool block 1 (port B = tilemap)
+assign pr_i[1].a_addr = {5'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
+assign pr_i[1].b_addr = {5'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
+assign vram_q = pr_o[1].a_q;
+assign vram_vd = pr_o[1].b_q;
 
 // object RAM as four byte lanes: one 32-bit sprite entry per video read
 logic [7:0] obj_lane_q[4];
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : objl
-        dpram_dc #(.widthad_a(8)) obj
-        (
-            .clock_a(clk), .address_a(bus_a[9:2]), .data_a(bus_d), .wren_a(bus_we & sel_obj & (bus_a[1:0] == ln)),
-            .q_a(obj_lane_q[ln]),
-            .clock_b(clk), .address_b(spr_a), .q_b(spr_d[ln*8 +: 8])
-        );
+        // object RAM lane ln: pool block 2 + ln (port B = sprite engine)
+        assign pr_i[2 + ln].a_addr = {7'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
+        assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
+        assign obj_lane_q[ln] = pr_o[2 + ln].a_q;
+        assign spr_d[ln*8 +: 8] = pr_o[2 + ln].b_q;
     end
 endgenerate
 logic [1:0] obj_lane;
@@ -247,19 +262,6 @@ assign eep_cs  = eep_cs_q;
 assign eep_clk = eep_clk_q;
 assign eep_di  = eep_di_q;
 
-// CONV-2026-10-26: Braze kit ROM address / data decode, EEPROM read. Original below.
-// assign rom_a = bus_a[15] ? {2'b11, bus_a[12:0]} : bus_a[14:0];
-//
-// always_comb begin
-//     if (iorq && !m1)    z80pa_0_i.di = dma_dout;
-//     else if (sel_rom)   z80pa_0_i.di = rom_d;
-//     else if (sel_ram)   z80pa_0_i.di = ram_q;
-//     else if (sel_obj)   z80pa_0_i.di = obj_q;
-//     else if (sel_vram)  z80pa_0_i.di = vram_q;
-//     else if (sel_io)    z80pa_0_i.di = io_q;
-//     else                z80pa_0_i.di = 8'hFF;
-// end
-// assign mem_q = sel_ram ? ram_q : sel_obj ? obj_q : sel_vram ? vram_q : sel_rom ? rom_d : 8'hFF;
 assign rom_a = braze ? dkong_kits_pkg::braze_addr(bus_a) : {1'b0, bus_a[15] ? {2'b11, bus_a[12:0]} : bus_a[14:0]};
 wire [7:0] rom_q = braze ? dkong_kits_pkg::braze_data(rom_d) : rom_d;
 
@@ -332,12 +334,10 @@ rp2a03 apu1
 genvar sc;
 generate
     for (sc = 0; sc < 2; sc++) begin : sram
-        dpram_dc #(.widthad_a(11)) ram
-        (
-            .clock_a(clk), .address_a(s_a[sc][10:0]), .data_a(s_do[sc]), .wren_a(apu_ce && !s_rw[sc] && !s_a[sc][15]),
-            .q_a(s_ram_q[sc]),
-            .clock_b(clk), .address_b(11'd0), .q_b()
-        );
+        // 2A03 RAM: pool block 6 + sc
+        assign pr_i[6 + sc].a_addr = {4'd0, s_a[sc][10:0]}; assign pr_i[6 + sc].a_d = s_do[sc]; assign pr_i[6 + sc].a_we = apu_ce && !s_rw[sc] && !s_a[sc][15];
+        assign pr_i[6 + sc].b_addr = 15'd0; assign pr_i[6 + sc].b_d = 8'h00; assign pr_i[6 + sc].b_we = 1'b0;
+        assign s_ram_q[sc] = pr_o[6 + sc].a_q;
     end
 endgenerate
 

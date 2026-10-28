@@ -3,13 +3,13 @@
 //  Nintendo Space Firebird board (Gremlin TST-CPU 834-0031 / TST-VIDEO 834-0030; MAME spacefb.cpp)
 //  Copyright (C) 2026 Rodimus
 //
-//  Main Z80 at 3 MHz (MAME SPACEFB_MAIN_CPU_CLOCK = 6 MHz / 2). Memory map (MAME spacefb_main_map):
+//  Main Z80 at 3 MHz (6 MHz / 2). Memory map:
 //    0000-3FFF ROM   8000-83FF object RAM (mirror 3C00)   C000-C7FF RAM (mirror 3000; C800-CFFF open)
 //  I/O (global mask 7): R 0 P1, 1 P2, 2 SYSTEM, 3 DSW, 4-7 open; W 0 / 4 port 0 (video: flip, object bank, colour
 //  bank), W 1 / 5 port 1 (sound board: spacefb_sound.sv), W 2 / 6 port 2 (star field contrast / background / off).
-//  Interrupts (MAME interrupt_callback): IRQ held until acknowledged at lines 0x80 and 0xF0, vector
+//  Interrupts: IRQ held until acknowledged at lines 0x80 and 0xF0, vector
 //  0xC7 | (line bit 6 << 4) | (!line bit 6 << 3): RST 08 at 0x80, RST 10 at 0xF0.
-//  Ports 0-2 are cleared on reset (MAME machine_reset).
+//  Ports 0-2 are cleared on reset .
 //  No CPU wait states (MAME has none; the block diagram's "ready" path is not traced yet #unverified).
 //
 //============================================================================
@@ -31,7 +31,7 @@ module spacefb_board
     input  logic  [7:0] in2,            // SYSTEM
     input  logic  [7:0] dsw0,           // DSW
 
-    // ROMs (shared blocks in rtl/nintendo_board.sv)
+    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
     output logic [14:0] rom_a,
     input  logic  [7:0] rom_d,
     output logic [14:0] gfx2_a,         // sprites 5K (0x000) / 6K (0x800)
@@ -53,14 +53,18 @@ module spacefb_board
     output logic        video_vblank,
 
     output logic signed [15:0] audio,
-    output logic signed [39:0] mul_a,   // MULPOOL-2026-10-23: shared multiplier (rtl/nintendo_board.sv)
+    output logic signed [39:0] mul_a,   // shared multiplier (rtl/nintendo_dispatcher.sv)
     output logic signed [26:0] mul_b,
     input  logic signed [66:0] mul_p,
 
     input  logic [15:0] hs_address,
     input  logic  [7:0] hs_data_in,
     output logic  [7:0] hs_data_out,
-    input  logic        hs_write
+    input  logic        hs_write,
+
+    // board RAM pool (dispatcher, ram_pool_pkg)
+    output ram_pool_pkg::pram_i_t [8:0] pr_i,
+    input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
@@ -100,11 +104,15 @@ assign rom_a = {1'b0, cpu_a[13:0]};
 
 // ------------------------------------------------------------------ RAMs
 logic [7:0] ram_q;
-dpram_dc #(.widthad_a(11)) ram
-(
-    .clock_a(clk), .address_a(cpu_a[10:0]), .data_a(cpu_d), .wren_a(cpu_we & sel_ram), .q_a(ram_q),
-    .clock_b(clk), .address_b(hs_address[10:0]), .data_b(hs_data_in), .wren_b(hs_write & pause), .q_b(hs_data_out)
-);
+assign pr_i[1] = '0;
+assign pr_i[6] = '0;
+assign pr_i[7] = '0;
+assign pr_i[8] = '0;
+// work RAM: pool block 0 (port B = hiscore)
+assign pr_i[0].a_addr = {4'd0, cpu_a[10:0]}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram;
+assign pr_i[0].b_addr = {4'd0, hs_address[10:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign ram_q = pr_o[0].a_q;
+assign hs_data_out = pr_o[0].b_q;
 
 // object RAM: four 256-byte pages (x, y, code, attributes), all read at once by the video
 logic [7:0] obj_va;
@@ -113,12 +121,11 @@ logic [7:0] obj_vq [4];
 genvar pg;
 generate
     for (pg = 0; pg < 4; pg++) begin : objp
-        dpram_dc #(.widthad_a(8)) obj
-        (
-            .clock_a(clk), .address_a(cpu_a[7:0]), .data_a(cpu_d), .wren_a(cpu_we && sel_obj && cpu_a[9:8] == pg),
-            .q_a(obj_cq[pg]),
-            .clock_b(clk), .address_b(obj_va), .q_b(obj_vq[pg])
-        );
+        // object RAM page pg: pool block 2 + pg (port B = video)
+        assign pr_i[2 + pg].a_addr = {7'd0, cpu_a[7:0]}; assign pr_i[2 + pg].a_d = cpu_d; assign pr_i[2 + pg].a_we = cpu_we && sel_obj && cpu_a[9:8] == pg;
+        assign pr_i[2 + pg].b_addr = {7'd0, obj_va}; assign pr_i[2 + pg].b_d = 8'h00; assign pr_i[2 + pg].b_we = 1'b0;
+        assign obj_cq[pg] = pr_o[2 + pg].a_q;
+        assign obj_vq[pg] = pr_o[2 + pg].b_q;
     end
 endgenerate
 

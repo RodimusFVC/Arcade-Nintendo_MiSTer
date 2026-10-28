@@ -6,10 +6,10 @@
 //  Sources: Bandido operator's manual (Exidy, 1980) p33-36 = I/O PCB 77-3367-1 and CPU PCB 77-3366-1 (Sheriff
 //  hardware), MAME n8080.cpp as reference. No Space Fever schematic on hand: its deltas are MAME's (#unverified).
 //
-//  Clocks: X 20.160 MHz (I/O 1A); LS160 2A / 10 = 8080 clock 2.016 MHz; dots 5.04 MHz (MAME set_raw: 320 x 256,
+//  Clocks: X 20.160 MHz (I/O 1A); LS160 2A / 10 = 8080 clock 2.016 MHz; dots 5.04 MHz (raster 320 x 256,
 //  visible x 0-255, y 16-239). Here a 20.16 MHz phase accumulator (49.152 MHz x 105 / 256) gives both.
-//  CPU: the pooled T80pa in its runtime 8080 mode (rtl/nintendo_board.sv drives I8080).
-//  Memory (MAME main_cpu_map, global mask 7FFF): 0000-3FFF ROM, 4000-7FFF RAM (8 x 4116 16K x 1 DRAM, CPU board);
+//  CPU: the pooled stock T80pa (Z80); the 8080 code runs unchanged. INTE = its IFF1 (z80pa_0_o.inte).
+//  Memory (global mask 7FFF): 0000-3FFF ROM, 4000-7FFF RAM (8 x 4116 16K x 1 DRAM, CPU board);
 //    the picture is 4000-5FFF, 32 bytes per line, bit n = dot x + n.
 //  I/O (LS42 3C, A2-A0): R 0 IN0, 1 IN1, 2 IN2, 3 shifter, 4 IN3; W 2 shift count, 3 shift data, 4 sound 1,
 //    5 sound 2, 6 video control. Shifter (LS151 2E-2H, LS174 3I, LS175 2J): read = {data, previous} >> (8 - count).
@@ -58,7 +58,7 @@ module n8080_board
     input  logic  [7:0] in2,            // IN2
     input  logic  [7:0] in3,            // IN3
 
-    // ROMs (shared blocks in rtl/nintendo_board.sv)
+    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
     output logic [14:0] rom_a,
     input  logic  [7:0] rom_d,
     output logic [12:0] prom_a,         // colour PROM in the gfx1 block (0x10000)
@@ -76,14 +76,22 @@ module n8080_board
     output logic        video_vblank,
 
     output logic signed [15:0] audio,
-    output logic signed [39:0] mul_a,   // MULPOOL-2026-10-23: shared multiplier (rtl/nintendo_board.sv)
+    output logic signed [39:0] mul_a,   // shared multiplier (rtl/nintendo_dispatcher.sv)
     output logic signed [26:0] mul_b,
     input  logic signed [66:0] mul_p,
 
     input  logic [15:0] hs_address,
     input  logic  [7:0] hs_data_in,
     output logic  [7:0] hs_data_out,
-    input  logic        hs_write
+    input  logic        hs_write,
+
+    // pooled SN76477 (dispatcher; driven by rtl/boards/n8080/n8080_sound.sv)
+    output chip_pool_pkg::sn76477_i_t sn76477_0_i,
+    input  chip_pool_pkg::sn76477_o_t sn76477_0_o,
+
+    // board RAM pool (dispatcher, ram_pool_pkg)
+    output ram_pool_pkg::pram_i_t [8:0] pr_i,
+    input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
@@ -129,22 +137,28 @@ assign rom_a = {1'b0, cpu_a[13:0]};
 // ------------------------------------------------------------------ RAM 4000-7FFF; port B = video
 logic [7:0] ram_q, vram_q;
 logic [13:0] v_addr;
-dpram_dc #(.widthad_a(14)) ram
-(
-    .clock_a(clk), .address_a(cpu_a[13:0]), .data_a(cpu_d), .wren_a(cpu_we & sel_ram), .q_a(ram_q),
-    .clock_b(clk), .address_b(v_addr), .data_b(8'h00), .wren_b(1'b0), .q_b(vram_q)
-);
+assign pr_i[2] = '0;
+assign pr_i[3] = '0;
+assign pr_i[4] = '0;
+assign pr_i[5] = '0;
+assign pr_i[6] = '0;
+assign pr_i[7] = '0;
+assign pr_i[8] = '0;
+// pool block 0
+assign pr_i[0].a_addr = {1'd0, cpu_a[13:0]}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram;
+assign pr_i[0].b_addr = {1'd0, v_addr}; assign pr_i[0].b_d = 8'h00; assign pr_i[0].b_we = 1'b0;
+assign ram_q = pr_o[0].a_q;
+assign vram_q = pr_o[0].b_q;
 assign hs_data_out = 8'h00;             // hiscore: not yet (needs its own RAM port; the video owns port B)
 
 // HeliFire colour RAM (2114 IC19, 1K x 3; stored 8 wide, bits 2-0 used)
 logic [7:0] cram_q8, cram_v8;
 logic [9:0] c_addr;
-dpram_dc #(.widthad_a(10)) cram
-(
-    .clock_a(clk), .address_a({cpu_a[12:8], cpu_a[4:0]}), .data_a({5'd0, cpu_d[2:0]}), .wren_a(cpu_we & sel_cram),
-    .q_a(cram_q8),
-    .clock_b(clk), .address_b(c_addr), .data_b(8'd0), .wren_b(1'b0), .q_b(cram_v8)
-);
+// pool block 1
+assign pr_i[1].a_addr = {5'd0, {cpu_a[12:8], cpu_a[4:0]}}; assign pr_i[1].a_d = {5'd0, cpu_d[2:0]}; assign pr_i[1].a_we = cpu_we & sel_cram;
+assign pr_i[1].b_addr = {5'd0, c_addr}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
+assign cram_q8 = pr_o[1].a_q;
+assign cram_v8 = pr_o[1].b_q;
 wire [2:0] cram_q = cram_q8[2:0], cram_v = cram_v8[2:0];
 
 // ------------------------------------------------------------------ I/O writes: shifter, sound latches, video control
@@ -279,21 +293,21 @@ always_comb begin
     if (col_mode == 2'd3) sh_col = 3'd7;
 end
 
-// ------------------------------------------------------------------ HeliFire background (MAME next_line / screen_update)
+// ------------------------------------------------------------------ HeliFire background
 localparam logic [2047:0] RAMP = 2048'hFFFEFCFBFAF9F7F6F5F4F3F1F0EFEEEDEBEAE9E8E7E6E4E3E2E1E0DFDEDDDBDAD9D8D7D6D5D4D3D2D1D0CFCECDCCCBC9C8C7C6C5C5C4C3C2C1C0BFBEBDBCBBBAB9B8B7B6B5B4B4B3B2B1B0AFAEADADACABAAA9A8A7A7A6A5A4A3A2A2A1A09F9E9E9D9C9B9B9A999897979695949493929191908F8F8E8D8C8C8B8A8A8988888786868584848382828180807F7E7E7D7D7C7B7B7A7979787877767675757474737272717170706F6E6E6D6D6C6C6B6B6A6A69696867676666656564646363626261616060605F5F5E5E5D5D5C5C5B5B5A5A5959595858575756565655555454535353525251515150504F4F4F4E4E4D4D4D4C4C4B4B4B4A4A4A49494948484747;
 localparam logic [503:0]  LFSR = 504'h0103070F1F3F7FFEFDFBF7EFDFBF7EFCF9F3E7CF9F3E7DFAF5EBD7AF5EBC78F0E1C3870E1D3B77EEDDBB76ECD9B366CC993265CA952A55AA54A850A0408000;
 localparam logic [7:0]    SUN  = 8'h50, SEA = 8'h00;
 function automatic [7:0] ramp(input [7:0] i);  ramp = RAMP[2047 - 8 * i -: 8];  endfunction
 function automatic [7:0] lfsr(input [5:0] k);  lfsr = LFSR[503 - 8 * k -: 8];  endfunction
 
-logic [8:0] mv = 9'd0;                  // MAME m_mv
-logic [1:0] sc = 2'd0;                  // MAME m_sc mod 4
+logic [8:0] mv = 9'd0;                  // sea / sky line counter
+logic [1:0] sc = 2'd0;                  // scroll phase mod 4
 logic [7:0] hz;                         // horizon of the line being shown
 logic [7:0] star_x;
 logic       star_on;
 logic [5:0] fl_n = 6'd0;                // (frame / 2) mod 63
 logic       fl_half = 1'b0;
-logic [2:0] fr8 = 3'd0;                 // frame mod 8 (bit 2 = MAME frame_number & 4)
+logic [2:0] fr8 = 3'd0;                 // frame mod 8 (bit 2 = frame & 4)
 logic       flash_g, flash_r;           // this frame's flash terms
 
 wire  [8:0] mv_inc = mv + 9'd1;
@@ -315,7 +329,7 @@ always_ff @(posedge clk) begin
                                      : star_pos(lfsr(6'((10'd5 * (mv - 9'd1)) % 10'd63)));
         mv <= mv_nx;
         if (mv_nx == 9'd128) sc <= sc + 2'd1;
-        if (vc == 8'd15) begin                                      // vblank ends: MAME screen_vblank (falling edge)
+        if (vc == 8'd15) begin                                      // vblank ends (falling edge)
             fr8 <= fr8 + 3'd1;
             fl_half <= ~fl_half;
             if (fl_half) fl_n <= (fl_n == 6'd62) ? 6'd0 : fl_n + 6'd1;
@@ -359,7 +373,7 @@ end
 n8080_sound sound
 (
     .clk(clk), .reset(reset), .pause(pause), .hf(hf), .sfev(sfev),
-    .mcs48_0_i(mcs48_0_i), .mcs48_0_o(mcs48_0_o),
+    .mcs48_0_i(mcs48_0_i), .mcs48_0_o(mcs48_0_o), .sn76477_0_i(sn76477_0_i), .sn76477_0_o(sn76477_0_o),
     .snd1(snd1), .snd2(snd2), .pa(snd_pa), .pd(snd_pd), .audio(audio), .mul_a(mul_a), .mul_b(mul_b), .mul_p(mul_p)
 );
 

@@ -9,7 +9,7 @@
 //    VSYNC = V 248-255 (256V low); VBLK flip-flop CK 16V, D = NAND(32V, 64V, 128V): blank V&FF 240 -> 16.
 //    /VRAM BUSY (LS74: CLR 256H, CK 2H, D = NAND(8H..64H)): CPU may use VRAM only h 258-377.
 //  Pictures from MAME dkong_v.cpp: 32x32 tilemap of 8x8 2bpp chars, colour code PROM per 4 rows x 1 column;
-//  128 4-byte sprites per bank, first 16 that hit a line are drawn (MAME draw_sprites row / x formulas), later ones on
+//  128 4-byte sprites per bank, first 16 that hit a line are drawn (reference row / x formulas), later ones on
 //  top; pen 0 transparent. Colour: two 256x4 PROMs into the resistor network (tools/resnet.py, schematic values),
 //  pen 0 of every tile colour = black (PROM disabled).
 //  Pixel pipeline: pixel h is looked up during slot h and shown in slot h+1 (blanking / sync delayed to match).
@@ -205,10 +205,6 @@ wire [3:0] e_col = mario ? spr_d[11:8]  : spr_d[19:16];
 wire [7:0] sx   = fl ? (sx0 ^ 8'hFF) - 8'd15 : sx0;
 
 assign spr_a  = {sprite_bank, scan_i[6:0]};
-// CONV-2026-10-26: 16K sprite ROM on the DK / Jr. board takes the DK3 form. Original below.
-// assign gfx2_a = mario ? {d_rd[2:0], s_code[d_i], s_row[d_i]}                         // data one clock later
-//               : dk3   ? {1'b0, d_rd[1:0], s_code[d_i], s_row[d_i]}
-//                       : {2'b00, d_rd[1:0], s_code[d_i][6:0], s_row[d_i]};
 assign gfx2_a = mario          ? {d_rd[2:0], s_code[d_i], s_row[d_i]}                // data one clock later
               : (dk3 | spr256) ? {1'b0, d_rd[1:0], s_code[d_i], s_row[d_i]}
                                : {2'b00, d_rd[1:0], s_code[d_i][6:0], s_row[d_i]};
@@ -292,7 +288,7 @@ function automatic [7:0] lv_rg(input [2:0] x);
         3'd4: lv_rg = 8'd116; 3'd5: lv_rg = 8'd80;  3'd6: lv_rg = 8'd41;  3'd7: lv_rg = 8'd0;
     endcase
 endfunction
-// DK3: 2200 / 1000 / 470 / 220 + 470 pull-up, darlington (MAME dkong3_net_info), same scaling
+// DK3: 2200 / 1000 / 470 / 220 + 470 pull-up, darlington, same scaling
 function automatic [7:0] lv4(input [3:0] x);
     case (x)
         4'd0:  lv4 = 8'd255; 4'd1:  lv4 = 8'd242; 4'd2:  lv4 = 8'd226; 4'd3:  lv4 = 8'd211;

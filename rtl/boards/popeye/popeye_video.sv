@@ -14,13 +14,13 @@
 //    V fld 0   16-239    240-243 (4)       244-246 (3)        247-262, 0-15     263
 //    V fld 1   16-239    240-242.5 (3.5)   242.5-245.5 (3)    245.5-261, 0-15   262
 //
-//  Pictures from MAME popeye_v.cpp (tpp2_state):
+//  Pictures (reference MAME popeye_v.cpp):
 //    text: 32 x 32 tiles of 8 x 8 1bpp chars shown at 2 x 2 (16 x 16 dots), colour = colour RAM low nibble; char palette
-//          PROM 3A address A4 = A3 (MAME tpp1_palette: "two address pins tied together"), pen 0 transparent.
+//          PROM 3A address A4 = A3 (two address pins tied together), pen 0 transparent.
 //    background: 4-bit pens from two 4K nibble RAMs (8P / 8S), low-res (2 x 2 dots); rovi = (y / 2, flipped) + scroll 1,
 //          roh = 0x38 + x / 2 + scroll 0 (MAME does not flip x), rovi bit 8 = 0 -> address 0; rovi bit 7 = nibble.
 //          Palette PROM 4A address = {palette bank bit 3, pen}.
-//    sprites (MAME draw_sprites): per frame line y, entries 1-159 of the DMA copy (4 bytes: x / 2, 256 - y / 2, code +
+//    sprites: per frame line y, entries 1-159 of the DMA copy (4 bytes: x / 2, 256 - y / 2, code +
 //          flip x, attributes) that cover y go to a 64-slot list indexed by x / 8 (TPP2-VIDEO MB7063 1M / 3M / 1P / 3P);
 //          a later entry replaces an earlier one in its slot. Slots are drawn in order, 16 dots each from x - 6,
 //          transparent dots included (a slot's right half is overwritten by the next slot). Line y = 2 x line + field:
@@ -33,10 +33,10 @@
 //  B 680 / 470 + 680; darlington, Sanyo EZV20), tools/resnet.py, all scaled by the same factor (brightest = 255).
 //  Pixel pipeline: the low-res pixel pair k + 1 is fetched during pair k (9+ clocks) and shown from its first dot.
 //
-//  tnx1 (Sky Skipper, MAME tnx1_state; no TNX1 schematic on hand):
+//  tnx1 (Sky Skipper; no TNX1 schematic on hand, deltas from MAME):
 //    background: roh = 0x38 + x / 2 + scroll 0 + (scroll 2 bit 0 << 8), address {rovi 7-2, roh 7-2}, nibble = roh bit 8
 //    text palette 1A: address {palette bank bit 3, colour} (no A4 = A3 tie)
-//    sprite palette 2A / 3A: A6 = A5, A7 open (MAME tnx1_palette) -> {0, bank 0, bank 0, colour, pen}
+//    sprite palette 2A / 3A: A6 = A5, A7 open  -> {0, bank 0, bank 0, colour, pen}
 //    gfx2 16K: 256 sprites, planes 0x2000 apart, left 8 dots in the second 0x1000
 //
 //============================================================================
@@ -55,7 +55,7 @@ module popeye_video
     input  logic  [3:0] pal_bank,       // dmasource[3] (bit 3 = text / background bank, 2-0 sprite bank)
 
     output logic        ce_pix,
-    output logic        vblank_start,   // one clock at field line 240 (MAME screen_vblank)
+    output logic        vblank_start,   // one clock at field line 240 
     output logic        field,          // 0 = even frame lines are being shown (CPU SYSTEM bit 4, VGA_F1)
 
     // text RAM (video + colour) and background RAM read ports

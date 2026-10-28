@@ -169,7 +169,7 @@ begin
 
 	u0 : T80
 		generic map(
-			Mode_g => Mode,
+			Mode => Mode,
 			IOWait => 1)
 		port map(
 			CEN => CEN,

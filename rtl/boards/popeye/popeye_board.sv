@@ -1,17 +1,17 @@
 //============================================================================
 //
-//  Nintendo Popeye board (TPP2-CPU / TPP2-VIDEO; MAME popeye.cpp tpp2_state, tpp2_noalu_state)
+//  Nintendo Popeye board (TPP2-CPU / TPP2-VIDEO; reference MAME popeye.cpp)
 //  Copyright (C) 2026 Rodimus
 //
 //  Main Z80 at 4 MHz from its own 8 MHz crystal (TPP2-CPU sheet 1: LS109 5F / 2), async to the 20.16 MHz video.
-//  Program ROM read through the board's address / data scramble (PLAs 6E / 6F / 6H; MAME tpp2_state::decrypt_rom):
+//  Program ROM read through the board's address / data scramble (PLAs 6E / 6F / 6H):
 //    ROM address = bitswap(A, 15,14,13,12,11,10,8,7,6,3,9,5,4,2,1,0) ^ 0x3F, data = bitswap(D, 3,4,2,5,1,6,0,7)
 //  Memory map (MAME tpp2 maincpu_program_map):
 //    0000-7FFF ROM   8800-8FFF RAM (8C00-8E7F = sprite DMA source; 8C00-8C03 = scroll x / y / -, palette bank)
 //    A000-A3FF text codes (W)   A400-A7FF text colours (W)   C000-DFFF background nibbles (W; A12 = high nibble)
 //    E000-E001 protection ALU 7K (W 0 = shift, W 1 = data, R 0 = shifted data, R 1 = status 0; MAME protection_*)
 //    I/O 00 W AY address / R P1, 01 W AY data / R P2, 02 R SYSTEM (bit 4 = field), 03 R AY data
-//  NMI enable / watchdog enable = A8 / A9 of the Z80 refresh address (I register; MAME refresh_w). NMI at vblank.
+//  NMI enable / watchdog enable = A8 / A9 of the Z80 refresh address (I register). NMI at vblank.
 //  Watchdog (MAME tpp2 screen_vblank): a 4-bit vblank counter, cleared while NMI is enabled or the watchdog is
 //  off; its bit 2 holds the CPU and the AY in reset.
 //  AY-3-8910 7L at 2 MHz: port A = DSW0 with bit 7 = the DSW1 switch picked by port B bits 1-3, port B bit 0 = flip.
@@ -21,7 +21,7 @@
 //  One byte per CPU clock (#unverified: the counter clock was not traced); MAME copies instantly.
 //  Sound: rtl/boards/popeye/popeye_sound.sv (AY channels into the TPP2-CPU output network).
 //
-//  tnx1 = Sky Skipper's TNX1 board (MAME tnx1_state; no TNX1 schematic on hand, so every delta below is MAME's):
+//  tnx1 = Sky Skipper's TNX1 board (no TNX1 schematic on hand, so every delta below is MAME's):
 //    ROM address = bitswap(A, 15,14,13,12,11,10,8,7,0,1,2,4,5,9,3,6) ^ 0xFC (data swap as TPP2)
 //    RAM 8000-87FF + 8C00-8FFF (8800-8BFF writes ignored); background C000-CFFF, data bit 7 = high nibble
 //    DMA byte 2 bit 0 = background scroll x bit 8; no watchdog; SYSTEM bit 4 not the field (MAME: unknown, 0)
@@ -35,7 +35,7 @@ module popeye_board
     input  logic        reset,
     input  logic        pause,
     input  logic        crt_flip,
-    input  logic        tnx1,           // Sky Skipper TNX1 board (MAME tnx1_state)
+    input  logic        tnx1,           // Sky Skipper TNX1 board
 
     output chip_pool_pkg::z80pa_i_t z80pa_0_i,
     input  chip_pool_pkg::z80pa_o_t z80pa_0_o,
@@ -46,7 +46,7 @@ module popeye_board
     input  logic  [7:0] dsw0,
     input  logic  [7:0] dsw1,
 
-    // ROMs (shared blocks in rtl/nintendo_board.sv)
+    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
     output logic [14:0] rom_a,
     input  logic  [7:0] rom_d,
     output logic [10:0] gfx1_a,
@@ -74,7 +74,15 @@ module popeye_board
     input  logic [15:0] hs_address,
     input  logic  [7:0] hs_data_in,
     output logic  [7:0] hs_data_out,
-    input  logic        hs_write
+    input  logic        hs_write,
+
+    // pooled AY-3-8910 (dispatcher)
+    output chip_pool_pkg::ayr_i_t  ay_0_i,
+    input  chip_pool_pkg::ayio_o_t ay_0_o,
+
+    // board RAM pool (dispatcher, ram_pool_pkg)
+    output ram_pool_pkg::pram_i_t [8:0] pr_i,
+    input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
@@ -142,12 +150,11 @@ logic       dma_req = 1'b0, dma_go = 1'b0;
 logic [9:0] dma_n;
 wire        dma_own = dma_req & busak;
 
-dpram_dc #(.widthad_a(12)) ram
-(
-    .clock_a(clk), .address_a(dma_own ? 12'hC00 + {2'b00, dma_n} : cpu_a[11:0]), .data_a(cpu_d),
-    .wren_a(cpu_we & sel_ram & ~dma_own), .q_a(ram_q),
-    .clock_b(clk), .address_b(hs_address[11:0]), .data_b(hs_data_in), .wren_b(hs_write & pause), .q_b(hs_data_out)
-);
+// work RAM: pool block 0 (port B = hiscore)
+assign pr_i[0].a_addr = {3'd0, (dma_own ? 12'hC00 + {2'b00, dma_n} : cpu_a[11:0])}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram & ~dma_own;
+assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign ram_q = pr_o[0].a_q;
+assign hs_data_out = pr_o[0].b_q;
 
 // sprite RAM (2T..1U): four byte lanes, one 32-bit entry per video read
 logic [7:0] spr_a;
@@ -156,37 +163,32 @@ wire        dma_wr = dma_go & cen_p & run;
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : sprl
-        dpram_dc #(.widthad_a(8)) spr
-        (
-            .clock_a(clk), .address_a(dma_n[9:2]), .data_a(ram_q), .wren_a(dma_wr && dma_n[1:0] == ln),
-            .clock_b(clk), .address_b(spr_a), .q_b(spr_d[ln*8 +: 8])
-        );
+        // sprite RAM lane ln: pool block 2 + ln (port A = DMA, port B = sprite engine)
+        assign pr_i[2 + ln].a_addr = {7'd0, dma_n[9:2]}; assign pr_i[2 + ln].a_d = ram_q; assign pr_i[2 + ln].a_we = dma_wr && dma_n[1:0] == ln;
+        assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
+        assign spr_d[ln*8 +: 8] = pr_o[2 + ln].b_q;
     end
 endgenerate
 
 // text codes (5P / 5R) and colours (5S, low nibble)
-dpram_dc #(.widthad_a(10)) txt_code
-(
-    .clock_a(clk), .address_a(cpu_a[9:0]), .data_a(cpu_d), .wren_a(cpu_we & sel_txt & ~cpu_a[10]),
-    .clock_b(clk), .address_b(txt_va), .q_b(txt_code_q)
-);
-dpram_dc #(.widthad_a(10)) txt_col
-(
-    .clock_a(clk), .address_a(cpu_a[9:0]), .data_a({4'h0, cpu_d[3:0]}), .wren_a(cpu_we & sel_txt & cpu_a[10]),
-    .clock_b(clk), .address_b(txt_va), .q_b(txt_col_q)
-);
+// pool block 1
+assign pr_i[1].a_addr = {5'd0, cpu_a[9:0]}; assign pr_i[1].a_d = cpu_d; assign pr_i[1].a_we = cpu_we & sel_txt & ~cpu_a[10];
+assign pr_i[1].b_addr = {5'd0, txt_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
+assign txt_code_q = pr_o[1].b_q;
+// pool block 6
+assign pr_i[6].a_addr = {5'd0, cpu_a[9:0]}; assign pr_i[6].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[6].a_we = cpu_we & sel_txt & cpu_a[10];
+assign pr_i[6].b_addr = {5'd0, txt_va}; assign pr_i[6].b_d = 8'h00; assign pr_i[6].b_we = 1'b0;
+assign txt_col_q = pr_o[6].b_q;
 
 // background nibbles (8P / 8S): C000-CFFF low, D000-DFFF high
-dpram_dc #(.widthad_a(12)) bg_lo
-(
-    .clock_a(clk), .address_a(cpu_a[11:0]), .data_a({4'h0, cpu_d[3:0]}), .wren_a(cpu_we & sel_bg & ~bg_hi_w),
-    .clock_b(clk), .address_b(bg_va), .q_b(bg_lo_q)
-);
-dpram_dc #(.widthad_a(12)) bg_hi
-(
-    .clock_a(clk), .address_a(cpu_a[11:0]), .data_a({4'h0, cpu_d[3:0]}), .wren_a(cpu_we & sel_bg & bg_hi_w),
-    .clock_b(clk), .address_b(bg_va), .q_b(bg_hi_q)
-);
+// pool block 7
+assign pr_i[7].a_addr = {3'd0, cpu_a[11:0]}; assign pr_i[7].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[7].a_we = cpu_we & sel_bg & ~bg_hi_w;
+assign pr_i[7].b_addr = {3'd0, bg_va}; assign pr_i[7].b_d = 8'h00; assign pr_i[7].b_we = 1'b0;
+assign bg_lo_q = pr_o[7].b_q;
+// pool block 8
+assign pr_i[8].a_addr = {3'd0, cpu_a[11:0]}; assign pr_i[8].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[8].a_we = cpu_we & sel_bg & bg_hi_w;
+assign pr_i[8].b_addr = {3'd0, bg_va}; assign pr_i[8].b_d = 8'h00; assign pr_i[8].b_we = 1'b0;
+assign bg_hi_q = pr_o[8].b_q;
 
 // ------------------------------------------------------------------ protection ALU (7K)
 logic [7:0] prot0, prot1;
@@ -256,13 +258,20 @@ logic [7:0] ay_dout, ay_portb, ay_a, ay_b, ay_c;
 logic [9:0] ay_sound;
 wire  [2:0] dswbit = ay_portb[3:1];
 
-jt49_bus ay
-(
-    .rst_n(~cpu_reset), .clk(clk), .clk_en(ay_cen),
-    .bdir(ay_wr_a | ay_wr_d), .bc1(ay_wr_a | ay_rd), .din(cpu_d), .dout(ay_dout), .sel(1'b1),
-    .sound(ay_sound), .sample(), .A(ay_a), .B(ay_b), .C(ay_c),
-    .IOA_in({dsw1[dswbit], dsw0[6:0]}), .IOA_out(), .IOB_in(8'hFF), .IOB_out(ay_portb)
-);
+// AY-3-8910: pooled ay_0 (dispatcher)
+assign ay_0_i.rst_n = ~cpu_reset;
+assign ay_0_i.ce = ay_cen;
+assign ay_0_i.bdir = ay_wr_a | ay_wr_d;
+assign ay_0_i.bc1 = ay_wr_a | ay_rd;
+assign ay_0_i.din = cpu_d;
+assign ay_dout = ay_0_o.dout;
+assign ay_sound = ay_0_o.sound;
+assign ay_a = ay_0_o.a;
+assign ay_b = ay_0_o.b;
+assign ay_c = ay_0_o.c;
+assign ay_0_i.ioa_in = {dsw1[dswbit], dsw0[6:0]};
+assign ay_0_i.iob_in = 8'hFF;
+assign ay_portb = ay_0_o.iob_out;
 wire flip = ay_portb[0];
 
 popeye_sound sound

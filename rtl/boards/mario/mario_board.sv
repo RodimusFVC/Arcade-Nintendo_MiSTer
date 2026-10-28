@@ -1,12 +1,12 @@
 //============================================================================
 //
-//  Nintendo Mario Bros. board (TMA1-CPU / TMA1-VIDEO; MAME mario.cpp mario_state)
+//  Nintendo Mario Bros. board (TMA1-CPU / TMA1-VIDEO; reference MAME mario.cpp)
 //  Copyright (C) 2026 Rodimus
 //
 //  TMA1-CPU (Mario_Bros_Schematics.pdf p13-16): Z80A 5E at 4 MHz from its own 8 MHz crystal (X1 -> 3D LS74 / 2), Z80A
 //  DMA 5D on the same clock (BUSRQ / BAI), /WAIT = VRAM BUSY through 2B / 4D LS74 (cleared in VBLK), NMI from VBLK
 //  (4D LS74) gated by NMI EI. Same structure as DKC1 (rtl/boards/dkong/dkong3_board.sv).
-//  Memory map (MAME mario_map):
+//  Memory map:
 //    0000-5FFF ROM 7F / 7E / 7D   6000-6FFF RAM 7A / 7B (6800-6FFF battery-backed)   7000-73FF sprite RAM (2 banks)
 //    7400-77FF video RAM   F000-FFFF ROM 7C (read at ROM 6000, MRA placement)
 //    7C00 R IN0   7C80 R IN1   7F80 R DSW   7D00 W Y scroll (MAME: + 17)   7E00 W sound latch
@@ -34,7 +34,7 @@ module mario_board
     input  logic  [7:0] in1,
     input  logic  [7:0] dsw0,
 
-    // ROMs (shared blocks in rtl/nintendo_board.sv)
+    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
     output logic [14:0] rom_a,          // F000-FFFF read at ROM 6000 (MRA placement)
     input  logic  [7:0] rom_d,
     output logic [11:0] snd_pa,         // soundrom 6K (program)
@@ -58,14 +58,22 @@ module mario_board
     output logic        video_vblank,
 
     output logic signed [15:0] audio,
-    output logic signed [39:0] mul_a,   // MULPOOL-2026-10-23: shared multiplier (rtl/nintendo_board.sv)
+    output logic signed [39:0] mul_a,   // shared multiplier (rtl/nintendo_dispatcher.sv)
     output logic signed [26:0] mul_b,
     input  logic signed [66:0] mul_p,
 
     input  logic [15:0] hs_address,
     input  logic  [7:0] hs_data_in,
     output logic  [7:0] hs_data_out,
-    input  logic        hs_write
+    input  logic        hs_write,
+
+    // pooled Z80 DMA (dispatcher)
+    output chip_pool_pkg::z80dma_i_t z80dma_0_i,
+    input  chip_pool_pkg::z80dma_o_t z80dma_0_o,
+
+    // board RAM pool (dispatcher, ram_pool_pkg)
+    output ram_pool_pkg::pram_i_t [8:0] pr_i,
+    input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
@@ -108,13 +116,23 @@ logic        dma_busrq, dma_busy, dma_mreq, dma_memw;
 logic        dma_rdy;
 wire         dma_cs = iorq && !m1 && cpu_a[7:0] == 8'h00 && !busak;
 
-z80dma dma
-(
-    .clk(clk), .reset(reset), .cen_p(cen_p & run),
-    .cs(dma_cs), .wr(io_we), .rd(io_re), .din(z80pa_0_o.dout), .dout(dma_dout),
-    .rdy(dma_rdy), .busrq(dma_busrq), .bai(busak),
-    .busy(dma_busy), .addr(dma_a), .mreq(dma_mreq), .iorq(), .memr(), .memw_s(dma_memw), .bus_d(mem_q), .data(dma_data)
-);
+// Z80 DMA: pooled z80dma_0 (dispatcher)
+assign z80dma_0_i.reset = reset;
+assign z80dma_0_i.cen_p = cen_p & run;
+assign z80dma_0_i.cs = dma_cs;
+assign z80dma_0_i.wr = io_we;
+assign z80dma_0_i.rd = io_re;
+assign z80dma_0_i.din = z80pa_0_o.dout;
+assign dma_dout = z80dma_0_o.dout;
+assign z80dma_0_i.rdy = dma_rdy;
+assign dma_busrq = z80dma_0_o.busrq;
+assign z80dma_0_i.bai = busak;
+assign dma_busy = z80dma_0_o.busy;
+assign dma_a = z80dma_0_o.addr;
+assign dma_mreq = z80dma_0_o.mreq;
+assign dma_memw = z80dma_0_o.memw_s;
+assign z80dma_0_i.bus_d = mem_q;
+assign dma_data = z80dma_0_o.data;
 
 // ------------------------------------------------------------------ bus (CPU or DMA)
 wire        dma_own = dma_busy & busak;
@@ -134,29 +152,32 @@ logic  [7:0] spr_a;
 logic  [9:0] vram_va;
 logic  [7:0] vram_vd;
 
-dpram_dc #(.widthad_a(12)) ram
-(
-    .clock_a(clk), .address_a(bus_a[11:0]), .data_a(bus_d), .wren_a(bus_we & sel_ram), .q_a(ram_q),
-    .clock_b(clk), .address_b(hs_address[11:0]), .data_b(hs_data_in), .wren_b(hs_write & pause), .q_b(hs_data_out)
-);
+assign pr_i[6] = '0;
+assign pr_i[7] = '0;
+assign pr_i[8] = '0;
 
-dpram_dc #(.widthad_a(10)) vram
-(
-    .clock_a(clk), .address_a(bus_a[9:0]), .data_a(bus_d), .wren_a(bus_we & sel_vram), .q_a(vram_q),
-    .clock_b(clk), .address_b(vram_va), .q_b(vram_vd)
-);
+// work RAM: pool block 0 (port B = hiscore)
+assign pr_i[0].a_addr = {3'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
+assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign ram_q = pr_o[0].a_q;
+assign hs_data_out = pr_o[0].b_q;
+
+// video RAM: pool block 1 (port B = tilemap)
+assign pr_i[1].a_addr = {5'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
+assign pr_i[1].b_addr = {5'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
+assign vram_q = pr_o[1].a_q;
+assign vram_vd = pr_o[1].b_q;
 
 // sprite RAM (two 2148s) as four byte lanes: one 32-bit entry per video read
 logic [7:0] obj_lane_q[4];
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : objl
-        dpram_dc #(.widthad_a(8)) obj
-        (
-            .clock_a(clk), .address_a(bus_a[9:2]), .data_a(bus_d), .wren_a(bus_we & sel_obj & (bus_a[1:0] == ln)),
-            .q_a(obj_lane_q[ln]),
-            .clock_b(clk), .address_b(spr_a), .q_b(spr_d[ln*8 +: 8])
-        );
+        // object RAM lane ln: pool block 2 + ln (port B = sprite engine)
+        assign pr_i[2 + ln].a_addr = {7'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
+        assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
+        assign obj_lane_q[ln] = pr_o[2 + ln].a_q;
+        assign spr_d[ln*8 +: 8] = pr_o[2 + ln].b_q;
     end
 endgenerate
 logic [1:0] obj_lane;
@@ -170,7 +191,7 @@ always_ff @(posedge clk) begin
         lat_7e8 <= 8'd0; scroll <= 8'd0; snd_tune <= 8'd0; lat_7f0 <= 8'd0;
     end else if (cpu_we && !dma_own && sel_io) begin
         case (cpu_a[9:7])
-            3'd2: scroll <= z80pa_0_o.dout + 8'd17;                // MAME scroll_w: set_scrolly(data + 17)
+            3'd2: scroll <= z80pa_0_o.dout + 8'd17;                // scroll = data + 17
             3'd4: snd_tune <= z80pa_0_o.dout;                      // 7E00 7J LS374
             3'd5: lat_7e8[cpu_a[2:0]] <= z80pa_0_o.dout[0];
             3'd6: lat_7f0[cpu_a[2:0]] <= z80pa_0_o.dout[0];        // 7F00-7F07 7M LS259

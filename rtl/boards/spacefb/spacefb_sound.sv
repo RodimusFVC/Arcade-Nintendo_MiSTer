@@ -4,8 +4,8 @@
 //  Copyright (C) 2026 Rodimus
 //
 //  IC19 8035 (6 MHz crystal, MAME SPACEFB_AUDIO_CPU_CLOCK) = the pooled T48 (mcs48_0), program IC20 2708 (1K, MAME
-//  global mask 0x3FF). Inputs from main port 1 (MAME port_1_w / audio_*_r): INT = bit 1 low, T0 = bit 5, T1 = bit 2,
-//  P2 4 / 5 = bits 3 / 4 (PB4 / PB5). Port reads are ANDed with the output latch (MAME in_a_p1 / p2; the pooled T48 is
+//  global mask 0x3FF). Inputs from main port 1 : INT = bit 1 low, T0 = bit 5, T1 = bit 2,
+//  P2 4 / 5 = bits 3 / 4 (PB4 / PB5). Port reads are ANDed with the output latch (the pooled T48 is
 //  built without gate_port_input_g). P1 out -> IC21 DAC08.
 //  DAC path: DAC08 Iout -> IC27 I-to-V (R40 5.6K) -> IC27 unity Sallen-Key low-pass (R38 / R39 5.6K, C23 0.022u,
 //  C24 0.01u: f0 1916 Hz, Q 0.74) -> R18 10K into the mix node (R19 1K to ground, R12 20K from the analog effects)
@@ -38,7 +38,7 @@ module spacefb_sound
 
     output logic signed [15:0] audio,
 
-    // MULPOOL-2026-10-23: the dispatcher's shared multiplier (rtl/nintendo_board.sv): a / b driven in clock t,
+    // the dispatcher's shared multiplier (rtl/nintendo_dispatcher.sv): a / b driven in clock t,
     // product registered for clock t + 2. Step-only products are issued in the 256 clocks between steps.
     output logic signed [39:0] mul_a,
     output logic signed [26:0] mul_b,
@@ -81,25 +81,7 @@ localparam signed [17:0] F  = 18'sd4108;
 localparam signed [17:0] D  = 18'sd88441;
 localparam signed [17:0] AH = 18'sd6286;    // C15 coupling: 1 - exp(-1 / (192 kHz x 13.9 ms)), x 2^24
 
-// MULPOOL-2026-10-23: original SVF below
-// logic signed [31:0] lo = 32'sd0, bp = 32'sd0, h = 32'sd0;
-// wire  signed [31:0] x0 = {8'd0, dac, 16'd0};
-// wire  signed [49:0] fb = 50'(bp) * 50'(F);
-// wire  signed [31:0] lo_n = lo + 32'(fb >>> 16);
-// wire  signed [49:0] db = 50'(bp) * 50'(D);
-// wire  signed [31:0] hp = x0 - lo_n - 32'(db >>> 16);
-// wire  signed [49:0] fh = 50'(hp) * 50'(F);
-// wire  signed [32:0] dh = 33'(lo) - 33'(h);
-// wire  signed [49:0] mh = 50'(dh) * 50'(AH);
-// always_ff @(posedge clk) begin
-//     if (reset) begin lo <= x0; bp <= 32'sd0; h <= x0; end     // settled on the DAC level: no pop at load / reset
-//     else if (step) begin
-//         lo <= lo_n;
-//         bp <= bp + 32'(fh >>> 16);
-//         h  <= h + 32'(mh >>> 24);
-//     end
-// end
-// MULPOOL-2026-10-23: products from the shared multiplier (issued between steps; same product bits)
+// products from the shared multiplier (issued between steps; same product bits)
 logic signed [31:0] lo = 32'sd0, bp = 32'sd0, h = 32'sd0;
 wire  signed [31:0] x0 = {8'd0, dac, 16'd0};
 logic signed [49:0] fb, db, p3, p4, mh;
@@ -266,49 +248,8 @@ wire [31:0] inc = 32'(exp2m(lf[15:8])) << (lf[20:16] - 5'd15);
 
 // envelopes (from the recordings): VCA level = max(ek, 2.7 x ef) clipped at 1, silent below 0.5 %;
 // explosion level = 1 - 1.19 x C11
-// MULPOOL-2026-10-23: original effects arithmetic and state update below
-// wire [16:0] avk = 17'(ek >> 8);
-// wire [49:0] afp = 50'(ef) * 50'd173;
-// wire [16:0] avf = (afp >= 50'(1) << 30) ? 17'd65536 : 17'(afp >> 14);
-// wire [16:0] avm = (avk > avf) ? avk : avf;
-// wire [16:0] av  = (avm < 17'd328) ? 17'd0 : avm;
-// wire [49:0] uxp = 50'(u) * 50'd77988;
-// wire [16:0] ux = 17'(uxp >> 24);
-// wire [16:0] ax = (ux >= 17'd65536) ? 17'd0 : 17'd65536 - ux;
-//
-// wire signed [18:0] nin = nsr[0] ? 19'sd65536 : -19'sd65536;
-// wire signed [35:0] nd = (36'(nin) - 36'(nl)) * 36'sd534;               // 250 Hz
-// wire signed [35:0] ne = 36'(nl) * 36'($signed({1'b0, ax}));
-// wire signed [35:0] no = 36'(18'(ne >>> 16)) * 36'sd17745;             // explosion level (rms ~10000 at full)
-// wire signed [10:0] vsq = $signed({2'b00, vsum}) * 11'sd2 - 11'sd256;    // square averaged over the step, +-256
-// wire signed [41:0] vip = 42'(vsq) * 42'sd2700 * 42'($signed({1'b0, av}));
-// wire signed [35:0] vin = 36'(vip >>> 8);
-// wire signed [35:0] vd = (36'(18'(vin >>> 16)) - 36'(vm)) * 36'sd24085;     // 14 kHz, two poles (the sweeps reach 19.5 kHz)
-// wire signed [35:0] vd2 = (36'(vm) - 36'(vl)) * 36'sd24085;
-// wire [24:0] fq_n = fq + 25'd218;
-//
-// always_ff @(posedge clk) begin
-//     if (reset) begin
-//         fire_m <= 1'b0; fq <= 25'd0; sp <= 24'd0; ek <= 25'd0; ef <= 25'd0; u <= ONE;
-//         nl <= 18'sd0; vm <= 18'sd0; vl <= 18'sd0;
-//     end else if (step) begin
-//         // 555 cycle: 345 ms, 80.5 ms while D0 is low; a ship fire restarts it after its 0.4 s first sweep
-//         if (fire_go) begin fire_m <= 1'b1; fq <= 25'd0; sp <= 24'd0; end
-//         else if (fire_m) begin fq <= fq_n; if (fq_n >= ONE) fire_m <= 1'b0; end
-//         else sp <= sp + (port1[0] ? 24'd253 : 24'd1085);
-//         // envelopes: full while D0 is low, then 0.4 s decay; full at D6 falling, 0.25 s decay
-//         if (!port1[0]) ek <= ONE; else ek <= ek - 25'((50'(ek) * 50'd218) >> 24);
-//         if (fire_go) ef <= ONE; else ef <= ef - 25'((50'(ef) * 50'd350) >> 24);
-//         // C11: discharged (47 ms) while D7 is low, recharges (0.52 s) after
-//         if (!port1[7]) u <= u - 25'((50'(u) * 50'd1859) >> 24);
-//         else u <= u + 25'(((50'(ONE) - 50'(u)) * 50'd169) >> 24);
-//         nl <= nl + 18'(nd >>> 16);
-//         vm <= vm + 18'(vd >>> 16);
-//         vl <= vl + 18'(vd2 >>> 16);
-//     end
-// end
-// MULPOOL-2026-10-23: step-only products from the shared multiplier; the continuously used ones (di -> inc,
-// ux / ne / no -> audio) keep local multipliers so every clock's output is unchanged
+// step-only products from the shared multiplier; the continuously used ones (di -> inc, ux / ne / no -> audio) keep
+// local multipliers so every clock's output is unchanged
 wire [16:0] avk = 17'(ek >> 8);
 logic [49:0] afp;
 wire [16:0] avf = (afp >= 50'(1) << 30) ? 17'd65536 : 17'(afp >> 14);

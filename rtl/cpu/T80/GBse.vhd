@@ -114,7 +114,7 @@ begin
 
 	u0 : T80
 		generic map(
-			Mode_g     => 3,
+			Mode      => 3,
 			IOWait    => IOWait,
 			Flag_S    => 0,
 			Flag_P    => 0,

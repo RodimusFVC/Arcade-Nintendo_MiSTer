@@ -1,6 +1,6 @@
 //============================================================================
 //
-//  Nintendo Mario Bros. discrete sounds (TMA1-CPU sound quarter; MAME nl_mario.cpp snd0 / snd1 / snd7)
+//  Nintendo Mario Bros. discrete sounds (TMA1-CPU sound quarter; reference MAME nl_mario.cpp)
 //  Copyright (C) 2026 Rodimus
 //
 //  Mario walk (7C00 write): 74123 2H one-shot (R17 27K / C14 4.7u + diode) -> 1H inverter -> R6 4.7K / C3 10u -> FC of
@@ -31,7 +31,7 @@ module mario_discrete
     output logic  [8:0] lvl1,           // Luigi walk
     output logic  [8:0] lvl7,           // skid
 
-    // MULPOOL-2026-10-23: the shared multiplier (via mario_sound): products issued at sdiv 24-47 between steps
+    // the shared multiplier (via mario_sound): products issued at sdiv 24-47 between steps
     input  logic  [7:0] sdiv,
     output logic signed [39:0] mul_a,
     output logic signed [26:0] mul_b,
@@ -106,39 +106,13 @@ end
 // ------------------------------------------------------------------ FC voltages (192 kHz one-pole)
 logic [31:0] v0 = 32'd0, v1 = 32'd0, v7a = 32'd0, v7b = 32'd0;      // upper 16 bits = FC (65536 = 3.2 V)
 logic [31:0] cnt = 32'd0;                                         // CD4020 (bit 3 = Q4, bit 11 = Q12) in clocks of 4K_B
-// MULPOOL-2026-10-23: original rc() and FC update below
-// function automatic [31:0] rc(input [31:0] v, input [15:0] t, input [12:0] a);
-//     logic signed [32:0] d;
-//     logic signed [45:0] p;
-//     d  = $signed({1'b0, t, 16'd0}) - $signed({1'b0, v});
-//     p  = 46'(d) * $signed({33'd0, a});
-//     rc = 32'($signed({1'b0, v}) + 33'(p >>> 24));
-// endfunction
-// always_ff @(posedge clk) begin
-//     if (reset) begin v0 <= 32'd0; v1 <= 32'd0; v7a <= 32'd0; v7b <= 32'd0; end
-//     else if (step && run) begin
-//         v0  <= rc(v0,  q0 ? T_W : 16'd0, A_W0);
-//         v1  <= rc(v1,  q1 ? T_W : 16'd0, A_W1);
-//         v7a <= rc(v7a, q7 ? 16'd0 : T_S7A, A_S7A);              // 4J inverts the one-shot: high while idle
-//         v7b <= rc(v7b, cnt[11] ? 16'd0 : T_S7B, A_S7B);         // 4J inverts Q12
-//     end
-// end
 
 // ------------------------------------------------------------------ VCOs (phase accumulators, MSB = output)
-// MULPOOL-2026-10-23: original VCO increments below
-// logic [31:0] i0a, i0b, i1a, i1b, i7a, i7b;
-// always_ff @(posedge clk) if (step) begin
-//     i0a <= vco_inc(v0[31:16],  13'd6564);   // 1J 3.9n
-//     i0b <= vco_inc(v0[31:16],  13'd1164);   // 2J 22n
-//     i1a <= vco_inc(v1[31:16],  13'd656);    // 1J 39n (C5)
-//     i1b <= vco_inc(v1[31:16],  13'd3765);   // 2J 6.8n (C16)
-//     i7a <= vco_inc(v7a[31:16], 13'd1164);   // 4K 22n
-//     i7b <= vco_inc(v7b[31:16], 13'd5447);   // 4K 4.7n
-// end
 
-// MULPOOL-2026-10-23: the same increments and FC steps, products from the shared multiplier. v* change only at step,
+// VCO increments and FC steps, products from the shared multiplier. v* change only at step,
 // so their products are issued in the period before; the one-shot / CD4020 targets are sampled at step, so each RC
-// gets both candidates (target high / 0). Same product bits as vco_inc() / rc(): bit-exact.
+// gets both candidates (target high / 0). Same product bits as a
+// local multiplier per product: bit-exact.
 logic [31:0] i0a, i0b, i1a, i1b, i7a, i7b;
 logic [15:0] fv [6];
 always_comb begin fv[0] = v0[31:16]; fv[1] = v0[31:16]; fv[2] = v1[31:16]; fv[3] = v1[31:16]; fv[4] = v7a[31:16]; fv[5] = v7b[31:16]; end

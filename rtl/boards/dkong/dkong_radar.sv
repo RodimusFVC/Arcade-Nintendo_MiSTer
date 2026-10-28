@@ -1,7 +1,7 @@
 //============================================================================
 //
-//  Nintendo Radar Scope (TRS-02) background: blue level, radar grid and stars (MAME dkong_v.cpp radarscp_step /
-//  radarscp_scanline, HARDWARE_TRS02)
+//  Nintendo Radar Scope (TRS-02) background: blue level, radar grid and stars (reference: MAME dkong_v.cpp, TRS-02
+//  hardware)
 //  Copyright (C) 2026 Rodimus
 //
 //  Once per line (start pulse, y = MAME vpos of the line to come), the analog model is stepped in fixed point
@@ -15,7 +15,7 @@
 //  star (shown while the star flip-flop is set) else grid (while the grid signal is on); the table half is chosen by
 //  flip ^ RFLIP; the walk restarts on lines <= 16 and > 239; after the line, entries past x 384 are skipped.
 //  Output: a 64-column x 2-bit buffer per line parity (0 blue, 1 star, 2 grid) + the line's background B.
-//  The 30 Hz noise bit (MAME machine().rand()) is a 16-bit LFSR here.
+//  The 30 Hz noise bit (random in the reference) is a 16-bit LFSR here.
 //
 //============================================================================
 
@@ -40,7 +40,7 @@ module dkong_radar
     output logic  [7:0] rd_blue         // B of the line's background
 );
 
-// 5 V x CD4049(v / 5) at v = i x 8 V / 512, Q24 (MAME dkong_v.cpp CD4049 model); entry = {value[26:0], next - value [20:0]}
+// 5 V x CD4049(v / 5) at v = i x 8 V / 512, Q24 (CD4049 inverter model); entry = {value[26:0], next - value [20:0]}
 function automatic logic [47:0] cd_lut(input logic [8:0] i);
     case (i)
         9'd0: cd_lut = {27'd83886080, 21'h000000};
@@ -557,7 +557,7 @@ function automatic logic [47:0] cd_lut(input logic [8:0] i);
         default: cd_lut = {27'd0, 21'h000000};
     endcase
 endfunction
-// blue background level -> B (MAME radarscp_blue_net_info, no normalize)
+// blue background level -> B (blue resistor net, not normalised)
 function automatic logic [7:0] blue_lut(input logic [7:0] i);
     case (i)
         8'd0: blue_lut = 8'd255; 8'd1: blue_lut = 8'd255; 8'd2: blue_lut = 8'd255; 8'd3: blue_lut = 8'd255;
@@ -685,7 +685,7 @@ logic        wb;                        // bank written for line ly
 logic [11:0] cnt;                       // table entry (2048 = end)
 logic  [9:0] xcur;
 logic        hoff;                      // table half: 0 -> 0x400 (MAME (flip ^ rflip) ? 0x000 : 0x400)
-wire   [9:0] lcw = {1'b0, ly} + 10'd249;                    // MAME line_cnt + 256 - 8 + 1, > 511 -> - VTOTAL
+wire   [9:0] lcw = {1'b0, ly} + 10'd249;                    // line count + 256 - 8 + 1, > 511 -> - VTOTAL
 wire   [9:0] lc  = (lcw > 10'd511) ? lcw - 10'd264 : lcw;
 wire   [8:0] p4  = {gfx3_d[6:0], 2'b00};
 wire   [9:0] pix_n = pixcnt + 10'd384;

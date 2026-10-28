@@ -3,10 +3,10 @@
 //  Intel 8257 DMA controller (the parts the Nintendo boards use)
 //  Copyright (C) 2026 Rodimus
 //
-//  State machine as MAME i8257_device: SI -> S0 (HRQ, wait HLDA) -> S1 -> S2 -> S3 (read) -> S4 (write, advance);
+//  State machine: SI -> S0 (HRQ, wait HLDA) -> S1 -> S2 -> S3 (read) -> S4 (write, advance);
 //  S4 goes straight to S1 while a request is pending, else drops HRQ. One state per ce (the 8257 CLK).
 //  Mode register: [3:0] channel enable, [4] rotating priority, [6] TC stop, [7] autoload (ch2 <- ch3).
-//  Transfer type from count[15:14]; rev_rw swaps read / write as MAME set_reverse_rw_mode (DK boards).
+//  Transfer type from count[15:14]; rev_rw swaps read / write (DK boards).
 //  READY tied high, extended write not modelled. Memory and I/O are the board's: addr / memr / memw / ior / iow.
 //
 //============================================================================
@@ -68,7 +68,7 @@ endfunction
 
 wire  [3:0] req = drq & mode[3:0];
 wire  [2:0] sel = pick(req, mode[4], last);
-// S4: MAME advance() (TC stop may disable this channel) happens before next_channel()
+// S4: the channel advance (TC stop may disable this channel) happens before the next channel is picked
 wire        tc_now  = tc || (ch_count[cur] == 14'd0 && ch_mode[cur] == T_READ);
 wire        al_now  = mode[7] && cur == 2'd2;
 wire  [3:0] en_s4   = mode[3:0] & ~((tc_now && mode[6] && !al_now) ? (4'd1 << cur) : 4'd0);
@@ -83,18 +83,9 @@ assign addr = xfer_addr;
 assign chan = xfer_chan;
 assign busy = (state == S1) || (state == S2) || (state == S3) || (state == S4) || memw || iow;
 
-// register reads
-// I8257RD-2026-10-26: the rd strobe comes at the START of the CPU read and has side effects (status TC bits clear, MSB
-// flip-flop toggles), but the CPU latches data at the END of the cycle, so it read the value after the side effect
-// (Drakton: status 03 read as 00, so its frame DMA never restarted). Now the value at the strobe is held until cs
-// drops, as MAME (value returned, then the side effect). Original below.
-// always_comb begin
-//     if (!a[3]) dout = a[0] ? (msb ? {(rev_rw && ch_mode[a[2:1]] != 2'd0) ? (ch_mode[a[2:1]] == T_WRITE ? 2'b10 : 2'b01)
-//                                                                          : ch_mode[a[2:1]], ch_count[a[2:1]][13:8]}
-//                                   : ch_count[a[2:1]][7:0])
-//                            : (msb ? ch_addr[a[2:1]][15:8] : ch_addr[a[2:1]][7:0]);
-//     else       dout = status;
-// end
+// register reads. The rd strobe comes at the START of the CPU read and has side effects (status TC bits clear, MSB
+// flip-flop toggles), but the CPU latches data at the END of the cycle, so the value at the strobe is held until cs
+// drops (value returned, then the side effect; Drakton: status 03 otherwise reads as 00 and its frame DMA never restarts).
 logic [7:0] dout_live, rd_val;
 logic       rd_held = 1'b0;
 always_comb begin
