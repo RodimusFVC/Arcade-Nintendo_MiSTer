@@ -1,60 +1,37 @@
-//============================================================================
-//
-//  Nintendo Mario Bros. discrete sounds (TMA1-CPU sound quarter; reference MAME nl_mario.cpp)
+//  Based on MAME nl_mario.cpp (Couriersud, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
-//
-//  Mario walk (7C00 write): 74123 2H one-shot (R17 27K / C14 4.7u + diode) -> 1H inverter -> R6 4.7K / C3 10u -> FC of
-//    LS629 1J (3.9n) and 2J (22n); out = (1J ^ 2J) & one-shot.
-//  Luigi walk (7C80 write): 2H second half (R18 30K / C15 4.7u) -> R7 4.7K / C4 4.7u -> LS629 1J (39n) / 2J (6.8n).
-//  Skid (7F07, SOUND7 = data inverted, rising edge triggers): 74123 4L (R61 47K / C41 4.7u) -> 4J inverter (FC high
-//    while idle) -> R65 10K / C44 3.3u -> LS629 4K (22n); LS629 4K second half (4.7n) clocks CD4020 3H, Q12 inverted ->
-//    R64 20K / C43 3.3u -> its own FC (slow self-sweep); out = (3H Q4 ^ 4K_A) & one-shot.
-//  LS629: MAME netlist polynomial (C = 0.1 uF, RNG = 5 V) as an increment table over FC 0-3.2 V (0.05 V steps, linear
-//    interpolation), x 0.1 uF / C; FC / RNG inputs 90K each (MAME). FC sources: TTL high 3.4 V #unverified into the
-//    series R and the FC input(s): walk 2 x 90K, skid 90K.
-//  VCOs and the CD4020 run on 32-bit phase accumulators at the system clock; each voice's TTL output is averaged over
-//    the 256 clocks of a 192 kHz sample (no aliasing of the ultrasonic XOR products) -> lvl = 0..256.
-//  One-shot widths: calibrated against MAME's isolated captures (the diode networks are not the plain 74123 formula).
-//
-//============================================================================
 
 module mario_discrete
 (
-    input  logic        clk,            // 49.152 MHz
+    input  logic        clk,
     input  logic        reset,
-    input  logic        run,            // !pause
-    input  logic        step,           // 192 kHz (clk / 256), one clock
-    input  logic        walk0,          // 7C00 write (one clock)
-    input  logic        walk1,          // 7C80 write
-    input  logic        sound7,         // SOUND7 level (7F07 data inverted)
-    output logic  [8:0] lvl0,           // Mario walk, fraction of the sample the output was high (0..256)
-    output logic  [8:0] lvl1,           // Luigi walk
-    output logic  [8:0] lvl7,           // skid
+    input  logic        run,
+    input  logic        step,
+    input  logic        walk0,
+    input  logic        walk1,
+    input  logic        sound7,
+    output logic  [8:0] lvl0,
+    output logic  [8:0] lvl1,
+    output logic  [8:0] lvl7,
 
-    // the shared multiplier (via mario_sound): products issued at sdiv 24-47 between steps
     input  logic  [7:0] sdiv,
     output logic signed [39:0] mul_a,
     output logic signed [26:0] mul_b,
     input  logic signed [66:0] mul_p
 );
 
-// ------------------------------------------------------------------ constants
-// one-shot widths in clocks, measured on MAME's isolated captures (tone on until): walk 0 22 ms, walk 1 24 ms, skid
-// 37 ms (re-triggered every 4 frames -> 37 ms bursts). = 0.173 x R x C for these diode networks.
 localparam int W0 = 1081344;
 localparam int W1 = 1199309;
 localparam int W7 = 1818624;
 
-// FC targets (65536 = 3.2 V) and one-pole coefficients (x 2^24) at 192 kHz
-localparam logic [15:0] T_W   = 16'd63048;  // 3.4 V x 45K / (4.7K + 45K)
-localparam logic [15:0] T_S7A = 16'd62669;  // 3.4 V x 90K / (10K + 90K)
-localparam logic [15:0] T_S7B = 16'd56975;  // 3.4 V x 90K / (20K + 90K)
-localparam logic [12:0] A_W0  = 13'd2051;   // (4.7K || 45K) x 10u   = 42.6 ms
-localparam logic [12:0] A_W1  = 13'd4366;   // (4.7K || 45K) x 4.7u  = 20.0 ms
-localparam logic [12:0] A_S7A = 13'd2941;   // (10K || 90K) x 3.3u   = 29.7 ms
-localparam logic [12:0] A_S7B = 13'd1618;   // (20K || 90K) x 3.3u   = 54.0 ms
+localparam logic [15:0] T_W   = 16'd63048;
+localparam logic [15:0] T_S7A = 16'd62669;
+localparam logic [15:0] T_S7B = 16'd56975;
+localparam logic [12:0] A_W0  = 13'd2051;
+localparam logic [12:0] A_W1  = 13'd4366;
+localparam logic [12:0] A_S7A = 13'd2941;
+localparam logic [12:0] A_S7B = 13'd1618;
 
-// LS629 increment table, C = 0.1 uF, RNG 5 V, FC = i x 0.05 V; inc = f x 2^32 / 49.152 MHz
 function automatic [17:0] ls629(input [6:0] i);
     case (i)
         7'd0:  ls629 = 18'd71243;  7'd1:  ls629 = 18'd69264;  7'd2:  ls629 = 18'd67560;  7'd3:  ls629 = 18'd66121;
@@ -77,7 +54,6 @@ function automatic [17:0] ls629(input [6:0] i);
     endcase
 endfunction
 
-// increment for FC v (65536 = 3.2 V) and cap scale (0.1 uF / C x 256)
 function automatic [31:0] vco_inc(input [15:0] v, input [12:0] scale);
     logic [17:0] t0, t1;
     logic signed [19:0] dt;
@@ -89,7 +65,6 @@ function automatic [31:0] vco_inc(input [15:0] v, input [12:0] scale);
     vco_inc = 32'((40'(base) * 40'(scale)) >>> 8);
 endfunction
 
-// ------------------------------------------------------------------ one-shots (retriggerable)
 logic [22:0] os0 = 23'd0, os1 = 23'd0, os7 = 23'd0;
 logic        s7_q = 1'b1;
 wire q0 = os0 != 23'd0, q1 = os1 != 23'd0, q7 = os7 != 23'd0;
@@ -103,22 +78,15 @@ always_ff @(posedge clk) begin
     end
 end
 
-// ------------------------------------------------------------------ FC voltages (192 kHz one-pole)
-logic [31:0] v0 = 32'd0, v1 = 32'd0, v7a = 32'd0, v7b = 32'd0;      // upper 16 bits = FC (65536 = 3.2 V)
-logic [31:0] cnt = 32'd0;                                         // CD4020 (bit 3 = Q4, bit 11 = Q12) in clocks of 4K_B
+logic [31:0] v0 = 32'd0, v1 = 32'd0, v7a = 32'd0, v7b = 32'd0;
+logic [31:0] cnt = 32'd0;
 
-// ------------------------------------------------------------------ VCOs (phase accumulators, MSB = output)
-
-// VCO increments and FC steps, products from the shared multiplier. v* change only at step,
-// so their products are issued in the period before; the one-shot / CD4020 targets are sampled at step, so each RC
-// gets both candidates (target high / 0). Same product bits as a
-// local multiplier per product: bit-exact.
 logic [31:0] i0a, i0b, i1a, i1b, i7a, i7b;
 logic [15:0] fv [6];
 always_comb begin fv[0] = v0[31:16]; fv[1] = v0[31:16]; fv[2] = v1[31:16]; fv[3] = v1[31:16]; fv[4] = v7a[31:16]; fv[5] = v7b[31:16]; end
 localparam logic [12:0] SC [6] = '{13'd6564, 13'd1164, 13'd656, 13'd3765, 13'd1164, 13'd5447};
-logic [29:0] pr1 [6];                       // dt x v[9:0] (vco_inc's 30-bit product)
-logic [39:0] pr2 [6];                       // base x scale
+logic [29:0] pr1 [6];
+logic [39:0] pr2 [6];
 logic [17:0] t0v [6];
 logic signed [19:0] dtv [6];
 logic [27:0] basev [6];
@@ -131,31 +99,28 @@ always_comb begin
 end
 logic [31:0] incv [6];
 always_comb for (int k = 0; k < 6; k++) incv[k] = 32'(pr2[k] >> 8);
-// RC candidates: d = target - v (33 bits), p = d x a (46 bits)
 logic [31:0] rv [4];
 always_comb begin rv[0] = v0; rv[1] = v1; rv[2] = v7a; rv[3] = v7b; end
 localparam logic [15:0] RT [4] = '{T_W, T_W, T_S7A, T_S7B};
 localparam logic [12:0] RA [4] = '{A_W0, A_W1, A_S7A, A_S7B};
-logic signed [45:0] rph [4], rpl [4];     // target high / target 0
-wire  [7:0] s24 = sdiv - 8'd24, s32 = sdiv - 8'd32, s40 = sdiv - 8'd40;   // issue slots
-wire  [7:0] c26 = sdiv - 8'd26, c34 = sdiv - 8'd34, c42 = sdiv - 8'd42;   // capture slots (+2)
+logic signed [45:0] rph [4], rpl [4];
+wire  [7:0] s24 = sdiv - 8'd24, s32 = sdiv - 8'd32, s40 = sdiv - 8'd40;
+wire  [7:0] c26 = sdiv - 8'd26, c34 = sdiv - 8'd34, c42 = sdiv - 8'd42;
 wire  [2:0] k24 = s24[2:0], k32 = s32[2:0], kc1 = c26[2:0], kc2 = c34[2:0];
 wire  [1:0] k40 = s40[2:1], kc3 = c42[2:1];
-wire  signed [32:0] rdh = $signed({1'b0, RT[k40], 16'd0}) - $signed({1'b0, rv[k40]});   // target - v
-wire  signed [32:0] rdl = -$signed({1'b0, rv[k40]});                                    // 0 - v
+wire  signed [32:0] rdh = $signed({1'b0, RT[k40], 16'd0}) - $signed({1'b0, rv[k40]});
+wire  signed [32:0] rdl = -$signed({1'b0, rv[k40]});
 always_comb begin
     mul_a = 40'sd0; mul_b = 27'sd0;
-    if (sdiv >= 8'd24 && sdiv < 8'd30) begin                      // dt x v[9:0]
+    if (sdiv >= 8'd24 && sdiv < 8'd30) begin
         mul_a = 40'(dtv[k24]); mul_b = 27'({17'd0, fv[k24][9:0]});
-    end else if (sdiv >= 8'd32 && sdiv < 8'd38) begin             // base x scale
+    end else if (sdiv >= 8'd32 && sdiv < 8'd38) begin
         mul_a = 40'({12'd0, basev[k32]}); mul_b = 27'({14'd0, SC[k32]});
-    end else if (sdiv >= 8'd40 && sdiv < 8'd48) begin             // RC: k = (sdiv - 40) / 2, odd = target 0
+    end else if (sdiv >= 8'd40 && sdiv < 8'd48) begin
         mul_a = sdiv[0] ? 40'(rdl) : 40'(rdh);
         mul_b = 27'({14'd0, RA[k40]});
     end
 end
-// in reset v = 0, so the products are the v = 0 constants (the pool may be serving another board while the variant
-// is not yet applied: the VCO phases run through reset and would pick up its products)
 always_ff @(posedge clk) begin
     if (reset) begin
         pr1[0] <= 30'd0; pr2[0] <= 40'd467639052;
@@ -185,8 +150,8 @@ always_ff @(posedge clk) begin
     else if (step && run) begin
         v0  <= rcn(v0,  q0 ? rph[0] : rpl[0]);
         v1  <= rcn(v1,  q1 ? rph[1] : rpl[1]);
-        v7a <= rcn(v7a, q7 ? rpl[2] : rph[2]);                     // 4J inverts the one-shot: high while idle
-        v7b <= rcn(v7b, cnt[11] ? rpl[3] : rph[3]);                // 4J inverts Q12
+        v7a <= rcn(v7a, q7 ? rpl[2] : rph[2]);
+        v7b <= rcn(v7b, cnt[11] ? rpl[3] : rph[3]);
     end
 end
 always_ff @(posedge clk) if (step) begin
@@ -201,7 +166,7 @@ always_ff @(posedge clk) begin
         p1a <= p1a + i1a; p1b <= p1b + i1b;
         p7a <= p7a + i7a; p7b <= p7b + i7b;
         p7b_q <= p7b[31];
-        if (p7b_q && !p7b[31]) cnt <= cnt + 32'd1;           // CD4020 counts falling edges
+        if (p7b_q && !p7b[31]) cnt <= cnt + 32'd1;
     end
 end
 
@@ -209,7 +174,6 @@ wire o0 = (p0a[31] ^ p0b[31]) & q0;
 wire o1 = (p1a[31] ^ p1b[31]) & q1;
 wire o7 = (cnt[3]  ^ p7a[31]) & q7;
 
-// ------------------------------------------------------------------ per-sample averages
 logic [8:0] a0 = 9'd0, a1 = 9'd0, a7 = 9'd0;
 always_ff @(posedge clk) begin
     if (step) begin

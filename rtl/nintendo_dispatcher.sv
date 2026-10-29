@@ -1,52 +1,15 @@
-//============================================================================
-//
-//  Nintendo early arcade hardware — dispatcher (pools: ROM, RAM, CPUs, sound multiplier; boards in rtl/boards/)
+//  Based on MAME dkong.cpp (Couriersud, BSD-3-Clause); popeye.cpp (smf, Nicola Salmoria, Couriersud, BSD-3-Clause); mario.cpp (Mirko Buffoni, Couriersud, BSD-3-Clause); spacefb.cpp (Chris Hardy, BSD-3-Clause); n8080.cpp (Pierpaolo Prazzoli, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
-//
-//  Variant 0: Donkey Kong, TKG-04 two-board set (MAME dkong.cpp dkong2b: dkong, dkongo, dkongj..., hacks)
-//  Variant 1: Donkey Kong Jr. (MAME dkongjr)
-//  Variant 2: Donkey Kong 3 (MAME dkong3)
-//  Variant 3: Popeye, TPP2 boards (MAME popeye.cpp)
-//  Variant 4: Mario Bros. (MAME mario.cpp)
-//  Variant 5: Space Firebird (MAME spacefb.cpp spacefb / spacedem)
-//  Variant 6: Radar Scope, TRS-02 (MAME dkong.cpp radarscp; DK board + dkong_radar.sv background)
-//  Variant 7: Sky Skipper, TNX1 (MAME popeye.cpp; Popeye board with the tnx1 gate)
-//  Variant 8: Space Fever / SF-HiSplitter / Space Launcher (MAME n8080.cpp spacefev; the 8080 runs on the pooled Z80)
-//  Variant 9: Sheriff / Bandido (MAME n8080.cpp sheriff)
-//  Variant 10: HeliFire (MAME n8080.cpp helifire)
-//  Variants 0 / 1 / 2 also run the conversion kits on DK hardware (rom_dec: Donkey King Jr., Epos, Braze)
-//
-//  ioctl index 0 (MRA), images stored as dumped; tools/gen_mra.py places MAME regions:
-//    0x00000 - 0x07FFF  maincpu  (DK3: 8000-9FFF at 0x6000)
-//    0x08000 - 0x09FFF  soundcpu (8035 program 0x000-0xFFF + MOVX ROM 0x1000-0x17FF; DK3 2A03 #1 8000-9FFF)
-//    0x0A000 - 0x0BFFF  2nd sound CPU (DK3 2A03 #2 8000-9FFF)
-//    0x0C000 - 0x0FFFF  gfx2     (sprites, four quarters: 0x800 apart on DK / Jr., 0x1000 on DK3)
-//    0x10000 - 0x11FFF  gfx1     (chars, two bitplane halves)
-//    0x12000 - 0x124FF  proms    (0x000 palette A: c-2k / 1d, 0x200 palette B: c-2j / 1c, 0x400 char colour codes)
-//  Popeye: maincpu 0x00000 (32K), gfx1 0x10000 (2K), proms 0x12000 sprite palette 5B (low nibbles), 0x12100 timing
-//    PROM 7J, 0x12200 sprite palette 5A (high nibbles), 0x12400 (0x00 background 4A, 0x20 text 3A), gfx2 0x18000 (32K)
-//    (Sky Skipper: same places, gfx2 16K)
-//  Mario: maincpu 0x00000 (F000-FFFF at 0x6000), soundrom 0x08000 (4K), gfx1 0x10000 (8K), proms 0x12000 (4P, 512),
-//    gfx2 0x18000 (24K)
-//  Space Firebird: maincpu 0x00000 (16K), audiocpu 0x08000 (1K), sprites 0x0C000 (5K 0x000 / 6K 0x800), bullets
-//    0x10000 (4I, 256), proms 0x12000 (3N colour, 32)
-//  Radar Scope: DK layout + gfx3 (radar / star timing table, 2K) at 0x11000 (read on gfx1 port A after the load)
-//  n8080: maincpu 0x00000 (16K), 8035 0x08000 (1K), colour PROM 0x10000 (Sheriff 1K, Space Fever 32) in the gfx1 block
-//  Braze kits (DK / DK Jr. / DK3 boards, rom_dec 4-6): kit ROM 0x0000-0x7FFF at index 0 0x00000, 0x8000-0xFFFF on
-//    ioctl index 5 (CPU ROM block upper half; the original maincpu ROMs are not loaded). 93C46 (jotego jt9346) contents = MRA
-//    <nvram index="4" size="128">, filled with FF while index 0 loads (MAME eeprom default; the NVRAM file comes after).
-//
-//============================================================================
 
 module nintendo_dispatcher
 (
-    input  logic        clk,            // 49.152 MHz
+    input  logic        clk,
     input  logic        reset,
     input  logic        pause,
     input  logic  [7:0] variant,
-    input  logic  [7:0] game_flags2,    // [0] IN2 bit 6 = sound CPU status, [1] steering dial, [2] 16K sprite ROM (DK / Jr.), [3] 8K char ROM (DK)
-    input  logic  [3:0] rom_dec,        // conversion kit decode (rtl/boards/dkong/dkong_kits_pkg.sv)
-    input  logic  [1:0] dial0,          // Street Heat steering dial P1 / P2
+    input  logic  [7:0] game_flags2,
+    input  logic  [3:0] rom_dec,
+    input  logic  [1:0] dial0,
     input  logic  [1:0] dial1,
     output logic        ce_pix,
 
@@ -60,9 +23,8 @@ module nintendo_dispatcher
     input  logic [24:0] ioctl_addr,
     input  logic  [7:0] ioctl_dout,
     input  logic        ioctl_wr0,
-    input  logic        ioctl_wr5,      // index 5: Braze kit ROM 8000-FFFF
+    input  logic        ioctl_wr5,
 
-    // Braze kit EEPROM image (ioctl index 4: load / save)
     input  logic  [6:0] nv_addr,
     input  logic  [7:0] nv_din,
     input  logic        nv_we,
@@ -79,7 +41,7 @@ module nintendo_dispatcher
     output logic        video_vs,
     output logic        video_hblank,
     output logic        video_vblank,
-    output logic        video_field,    // interlaced boards: field being shown (VGA_F1)
+    output logic        video_field,
 
     output logic signed [15:0] audio,
 
@@ -91,24 +53,22 @@ module nintendo_dispatcher
 
 /////////////////////////////  Shared ROM blocks  /////////////////////////////
 
-wire load_cpu  = ioctl_wr0 && ioctl_addr[24:15] == 10'h000;        // 0x00000-0x07FFF
-// The Braze kit ROM's upper half loads on ioctl index 5: at index 0 0x20000 the MRA's zero padding from 0x12500 would
-// run through 0x18000-0x1FFFF (Popeye's gfx2 load window) and wipe the DK sprite ROM.
-wire load_cpuh = ioctl_wr5 && ioctl_addr[24:15] == 10'h000;        // index 5 0x0000-0x7FFF (Braze kit ROM 8000-FFFF)
-wire load_snd  = ioctl_wr0 && ioctl_addr[24:13] == 12'h004;        // 0x08000-0x09FFF
-wire load_snd2 = ioctl_wr0 && ioctl_addr[24:13] == 12'h005;        // 0x0A000-0x0BFFF
-wire load_gfx2 = ioctl_wr0 && ioctl_addr[24:14] == 11'h003;        // 0x0C000-0x0FFFF
-wire load_gfx2p = ioctl_wr0 && ioctl_addr[24:15] == 10'h003;       // 0x18000-0x1FFFF (Popeye, 32K)
-wire load_gfx1 = ioctl_wr0 && ioctl_addr[24:13] == 12'h008;        // 0x10000-0x11FFF
-wire load_prom = ioctl_wr0 && ioctl_addr[24:11] == 14'h0024;       // 0x12000-0x127FF
+wire load_cpu  = ioctl_wr0 && ioctl_addr[24:15] == 10'h000;
+wire load_cpuh = ioctl_wr5 && ioctl_addr[24:15] == 10'h000;
+wire load_snd  = ioctl_wr0 && ioctl_addr[24:13] == 12'h004;
+wire load_snd2 = ioctl_wr0 && ioctl_addr[24:13] == 12'h005;
+wire load_gfx2 = ioctl_wr0 && ioctl_addr[24:14] == 11'h003;
+wire load_gfx2p = ioctl_wr0 && ioctl_addr[24:15] == 10'h003;
+wire load_gfx1 = ioctl_wr0 && ioctl_addr[24:13] == 12'h008;
+wire load_prom = ioctl_wr0 && ioctl_addr[24:11] == 14'h0024;
 
 wire is_dk3 = variant == 8'd2;
 wire is_sky = variant == 8'd7;
-wire is_pop = variant == 8'd3 || is_sky;           // Popeye board runs both
+wire is_pop = variant == 8'd3 || is_sky;
 wire is_mar = variant == 8'd4;
 wire is_sfb = variant == 8'd5;
 wire is_rs  = variant == 8'd6;
-wire is_n80 = variant == 8'd8 || variant == 8'd9 || variant == 8'd10;   // n8080 board (8 Space Fever, 9 Sheriff, 10 HeliFire)
+wire is_n80 = variant == 8'd8 || variant == 8'd9 || variant == 8'd10;
 
 logic [15:0] rom_a, dk_rom_a, dk3_rom_a;
 logic [14:0] pop_rom_a, mar_rom_a, sfb_rom_a, n80_rom_a;
@@ -137,18 +97,12 @@ dpram_dc #(.widthad_a(16)) rom_cpu
     .clock_b(clk), .address_b(rom_a), .q_b(rom_d)
 );
 
-// Braze kit 93C46, 128 x 8 (jotego jt9346). Second port: FF fill during the index 0 load, then the MRA NVRAM
-// image (index 4) / save.
-// jt9346 is used unmodified. It takes a start bit only as DI going 0 -> 1 between two clocks, but the Braze kits clock
-// their reads with DI held at 1, so the next command's start bit (DI = 1 again) would be missed. On each CS rising edge
-// this wrapper clocks one 0 in first; a 93C46 ignores 0s before the start bit (datasheet; MAME eepromser).
-// DO reads 1 while CS is low (open output with a pull-up, as MAME eepromser).
 logic dk_eep_cs, dk_eep_clk, dk_eep_di, dk3_eep_cs, dk3_eep_clk, dk3_eep_di, eep_sdo;
 wire  eep_cs   = is_dk3 ? dk3_eep_cs : dk_eep_cs;
 wire  eep_do   = eep_cs ? eep_sdo : 1'b1;
 wire  eep_fill = ioctl_wr0 && ioctl_addr[24:7] == 18'd0;
 logic       eep_cs_q = 1'b0;
-logic [1:0] eep_pre  = 2'd0;            // 2: clock low, DI 0; 1: clock high, DI 0 (the leading 0); 0: CPU pins
+logic [1:0] eep_pre  = 2'd0;
 always_ff @(posedge clk) begin
     eep_cs_q <= eep_cs;
     if (eep_cs && !eep_cs_q) eep_pre <= 2'd2;
@@ -166,21 +120,18 @@ jt9346 #(.AW(7), .CW(7), .DW(8)) eeprom
     .dump_clr(1'b0), .dump_flag()
 );
 
-// sound ROM: port A = 8035 program once the download is over, port B = MOVX data
 dpram_dc #(.widthad_a(13)) rom_snd
 (
     .clock_a(clk), .address_a(reset ? ioctl_addr[12:0] : {1'b0, snd_pa}), .data_a(ioctl_dout), .wren_a(load_snd), .q_a(snd_pd),
     .clock_b(clk), .address_b(snd_xa), .q_b(snd_xd)
 );
 
-// second sound CPU ROM (DK3 2A03 #2)
 dpram_dc #(.widthad_a(13)) rom_snd2
 (
     .clock_a(clk), .address_a(ioctl_addr[12:0]), .data_a(ioctl_dout), .wren_a(load_snd2),
     .clock_b(clk), .address_b(dk3_snd2_a), .q_b(snd2_d)
 );
 
-// gfx1 block: port A = download, then Radar Scope's gfx3 table (0x11000)
 logic [10:0] rs_gfx3_a;
 logic  [7:0] gfx3_q;
 dpram_dc #(.widthad_a(13)) rom_gfx1
@@ -197,7 +148,6 @@ dpram_dc #(.widthad_a(15)) rom_gfx2
     .clock_b(clk), .address_b(gfx2_a), .q_b(gfx2_d)
 );
 
-// palette PROMs 512 deep (DK3 1d / 1c); every board reads the first 256 entries, as MAME
 dpram_dc #(.widthad_a(9)) prom_lo
 (
     .clock_a(clk), .address_a(ioctl_addr[8:0]), .data_a(ioctl_dout), .wren_a(load_prom && ioctl_addr[10:9] == 2'd0),
@@ -215,7 +165,6 @@ dpram_dc #(.widthad_a(8)) prom_cc
 );
 
 /////////////////////////////  Board RAM pool  /////////////////////////////
-// One board runs at a time, so its RAMs share these blocks (ram_pool_pkg; the board drives pr_i, every board sees pr_o).
 //   pr 0  16K  work RAM (DK / DK Jr. / Radar Scope / DK3 / Mario / Popeye 4K, Space Firebird 2K; port B hiscore) or
 //              the n8080 RAM 4000-7FFF (port B = video)
 //   pr 1  1K   video RAM (DK / DK3 / Mario), Popeye text codes, n8080 HeliFire colour RAM
@@ -274,8 +223,6 @@ dpram_dc #(.widthad_a(12)) pr_8
 );
 
 /////////////////////////////  Shared sound multiplier  /////////////////////////////
-// One signed 40 x 27 multiplier for the boards' analog sound models (Mario, Space Firebird, n8080). Only one board runs;
-// each issues its products in the 256 clocks between its 192 kHz steps: a / b in clock t, product in clock t + 2.
 logic signed [39:0] mar_mul_a, sfb_mul_a, n80_mul_a, mul_a, mul_ar;
 logic signed [26:0] mar_mul_b, sfb_mul_b, n80_mul_b, mul_b, mul_br;
 logic signed [66:0] mul_p;
@@ -288,10 +235,8 @@ always_ff @(posedge clk) begin
 end
 
 /////////////////////////////  Shared CPU / sound chip pool  /////////////////////////////
-// One board runs at a time: each CPU is instanced once and driven by the active board (rtl/chip_pool_pkg.sv).
 
 // z80pa_0: main CPU of every board, stock T80pa (DK / DK Jr. at 1H, DK3 at 4 MHz; the n8080 boards' 8080 runs on it
-// unchanged: Space Fever / Sheriff / HeliFire sim byte-identical to an 8080-mode core)
 chip_pool_pkg::z80pa_i_t dk_z80pa_0_i, dk3_z80pa_0_i, pop_z80pa_0_i, mar_z80pa_0_i, sfb_z80pa_0_i, n80_z80pa_0_i, z80pa_0_i;
 chip_pool_pkg::z80pa_o_t z80pa_0_o;
 assign z80pa_0_i = is_dk3 ? dk3_z80pa_0_i : is_pop ? pop_z80pa_0_i : is_mar ? mar_z80pa_0_i : is_sfb ? sfb_z80pa_0_i : is_n80 ? n80_z80pa_0_i :
@@ -315,7 +260,7 @@ assign z80pa_0_o.a = z80pa_0_a;           assign z80pa_0_o.dout = z80pa_0_do;
 assign z80pa_0_o.m1_n = z80pa_0_m1_n;     assign z80pa_0_o.mreq_n = z80pa_0_mreq_n; assign z80pa_0_o.iorq_n = z80pa_0_iorq_n;
 assign z80pa_0_o.rd_n = z80pa_0_rd_n;     assign z80pa_0_o.wr_n = z80pa_0_wr_n;     assign z80pa_0_o.rfsh_n = z80pa_0_rfsh_n;
 assign z80pa_0_o.busak_n = z80pa_0_busak_n;
-assign z80pa_0_o.inte = z80pa_0_reg[210];   // IFF1 = the 8080's INTE pin (n8080 interrupt latch)
+assign z80pa_0_o.inte = z80pa_0_reg[210];
 
 // mcs48_0: Donkey Kong / Mario Bros. / Space Firebird sound CPU (8035 / 8039; T48 t8039_notri_extrom, Arnim Laeuger)
 chip_pool_pkg::mcs48_i_t dk_mcs48_0_i, mar_mcs48_0_i, sfb_mcs48_0_i, n80_mcs48_0_i, mcs48_0_i;
@@ -341,6 +286,7 @@ t8039_notri_extrom #(
 
 assign mcs48_0_o.p1 = mcu_p1;  assign mcs48_0_o.p2 = mcu_p2;  assign mcs48_0_o.pmem_a = mcu_pa;
 assign mcs48_0_o.rd_n = mcu_rd_n;  assign mcs48_0_o.wr_n = mcu_wr_n;  assign mcs48_0_o.ale = mcu_ale;  assign mcs48_0_o.db = mcu_db;
+assign mcs48_0_o.db_dir = 1'b0;
 
 // t65_0 / t65_1: RP2A03 6502 cores, stock T65 (DK3 sound #1 / #2; the APUs are on the board, rtl/sound/rp2a03.sv)
 chip_pool_pkg::t65_i_t t65_0_i, t65_1_i;
@@ -409,7 +355,6 @@ sn76477 #(.C2P(32'd20574012)) sn76477_0
 );
 
 /////////////////////////////  Boards  /////////////////////////////
-// the board not selected is held in reset; its outputs are muxed away
 
 logic        dk_ce_pix, dk3_ce_pix, pop_ce_pix, mar_ce_pix, sfb_ce_pix, n80_ce_pix;
 logic  [7:0] dk_r, dk_g, dk_b, dk3_r, dk3_g, dk3_b, pop_r, pop_g, pop_b, mar_r, mar_g, mar_b, sfb_r, sfb_g, sfb_b, n80_r, n80_g, n80_b;
@@ -430,7 +375,6 @@ assign video_field  = is_pop & pop_fld;
 assign audio        = is_dk3 ? dk3_audio : is_pop ? pop_audio : is_mar ? mar_audio : is_sfb ? sfb_audio : is_n80 ? n80_audio : dk_audio;
 assign hs_data_out  = is_dk3 ? dk3_hs_out : is_pop ? pop_hs_out : is_mar ? mar_hs_out : is_sfb ? sfb_hs_out : is_n80 ? n80_hs_out : dk_hs_out;
 
-// Donkey Kong (TKG-04) / Donkey Kong Jr.
 dkong_board dkong
 (
     .clk(clk), .reset(reset | is_dk3 | is_pop | is_mar | is_sfb | is_n80), .pause(pause), .crt_flip(crt_flip), .jr(variant == 8'd1), .radar(is_rs),
@@ -450,7 +394,6 @@ dkong_board dkong
     .pr_i(dk_pr_i), .pr_o(pr_o)
 );
 
-// Donkey Kong 3 (DKC1)
 dkong3_board dkong3
 (
     .clk(clk), .reset(reset | ~is_dk3), .pause(pause), .crt_flip(crt_flip),
@@ -469,7 +412,6 @@ dkong3_board dkong3
     .pr_i(dk3_pr_i), .pr_o(pr_o)
 );
 
-// Popeye (TPP2-CPU / TPP2-VIDEO)
 popeye_board popeye
 (
     .clk(clk), .reset(reset | ~is_pop), .pause(pause), .crt_flip(crt_flip), .tnx1(is_sky),
@@ -485,7 +427,6 @@ popeye_board popeye
     .pr_i(pop_pr_i), .pr_o(pr_o)
 );
 
-// Mario Bros. (TMA1-CPU / TMA1-VIDEO)
 mario_board mario
 (
     .clk(clk), .reset(reset | ~is_mar), .pause(pause), .crt_flip(crt_flip),
@@ -502,7 +443,6 @@ mario_board mario
     .pr_i(mar_pr_i), .pr_o(pr_o)
 );
 
-// Space Firebird (TST-CPU / TST-VIDEO)
 spacefb_board spacefb
 (
     .clk(clk), .reset(reset | ~is_sfb), .pause(pause), .crt_flip(crt_flip),
@@ -517,7 +457,6 @@ spacefb_board spacefb
     .pr_i(sfb_pr_i), .pr_o(pr_o)
 );
 
-// Nintendo 8080 boards (Space Fever family, Sheriff, HeliFire): the 8080 code runs on the pooled Z80
 n8080_board n8080
 (
     .clk(clk), .reset(reset | ~is_n80), .pause(pause), .crt_flip(crt_flip), .sfev(variant == 8'd8), .hf(variant == 8'd10),

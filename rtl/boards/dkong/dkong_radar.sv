@@ -1,46 +1,27 @@
-//============================================================================
-//
-//  Nintendo Radar Scope (TRS-02) background: blue level, radar grid and stars (reference: MAME dkong_v.cpp, TRS-02
-//  hardware)
+//  Based on MAME dkong_v.cpp (Couriersud, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
-//
-//  Once per line (start pulse, y = MAME vpos of the line to come), the analog model is stepped in fixed point
-//  (voltages Q24, RC factors 1 - exp(-dt / RC) x 2^24 with MAME's dt = 1 / 60 / 264) on one multiplier:
-//    sig = SOUND2 & 30 Hz noise bit ^ 128VF; C 22u (2.2K) / 33u (10K) into two CD4049 stages solved by MAME's fixed
-//    11 + 11 iterations (CD4049 = MAME's exp(-a x^b) curve, 513-point table with linear interpolation), C17 coupling
-//    -> blue level = vo / 5 x 255 (wraps as MAME's uint8); grid: C (18K / 86K x 33u) and C (90K x 0.47u) chain, gated
-//    by the grid enable (7D81) and ANS (8035 P2.5), through two CD4049s to a TTL threshold; stars: flip-flop toggled
-//    every 459 pixels (MAME period2).
-//  Then the line's dots are walked from the 2K timing table (gfx3) exactly as MAME: entry x = 4 x (t & 7F), bit 7 =
-//  star (shown while the star flip-flop is set) else grid (while the grid signal is on); the table half is chosen by
-//  flip ^ RFLIP; the walk restarts on lines <= 16 and > 239; after the line, entries past x 384 are skipped.
-//  Output: a 64-column x 2-bit buffer per line parity (0 blue, 1 star, 2 grid) + the line's background B.
-//  The 30 Hz noise bit (random in the reference) is a 16-bit LFSR here.
-//
-//============================================================================
 
 module dkong_radar
 (
     input  logic        clk,
     input  logic        reset,
 
-    input  logic        start,          // prepare line y (one clock)
-    input  logic  [8:0] y,              // MAME vpos 0-263
+    input  logic        start,
+    input  logic  [8:0] y,
     input  logic        flip,
-    input  logic        snd2,           // 6H Q2 (SOUND2)
-    input  logic        grid_on,        // 7D81
-    input  logic        ans,            // 8035 P2.5
+    input  logic        snd2,
+    input  logic        grid_on,
+    input  logic        ans,
 
-    output logic [10:0] gfx3_a,         // timing table (data 2 clocks later)
+    output logic [10:0] gfx3_a,
     input  logic  [7:0] gfx3_d,
 
-    input  logic        rd_bank,        // parity of the displayed line
+    input  logic        rd_bank,
     input  logic  [5:0] rd_col,         // h[7:2]
-    output logic  [1:0] rd_type,        // 0 blue, 1 star, 2 grid
-    output logic  [7:0] rd_blue         // B of the line's background
+    output logic  [1:0] rd_type,
+    output logic  [7:0] rd_blue
 );
 
-// 5 V x CD4049(v / 5) at v = i x 8 V / 512, Q24 (CD4049 inverter model); entry = {value[26:0], next - value [20:0]}
 function automatic logic [47:0] cd_lut(input logic [8:0] i);
     case (i)
         9'd0: cd_lut = {27'd83886080, 21'h000000};
@@ -557,7 +538,6 @@ function automatic logic [47:0] cd_lut(input logic [8:0] i);
         default: cd_lut = {27'd0, 21'h000000};
     endcase
 endfunction
-// blue background level -> B (blue resistor net, not normalised)
 function automatic logic [7:0] blue_lut(input logic [7:0] i);
     case (i)
         8'd0: blue_lut = 8'd255; 8'd1: blue_lut = 8'd255; 8'd2: blue_lut = 8'd255; 8'd3: blue_lut = 8'd255;
@@ -632,7 +612,6 @@ localparam signed [31:0] V4_8 = 32'sd80530637, V5 = 32'sd83886080, V10_3 = 32'sd
 localparam signed [17:0] K1 = 18'sd21869, K2 = 18'sd3209, K31 = 18'sd1783, K32 = 18'sd373, K4 = 18'sd25021,
                          K17 = 18'sd4814, K08 = 18'sd52429, K51 = 18'sd51;
 
-// iteration weights x 2^16: j / 100 (j = 1..11), j / 40 (j = 10..20)
 function automatic logic signed [17:0] fw(input logic second, input logic [3:0] j);
     case ({second, j})
         5'h00: fw = 18'sd655;   5'h01: fw = 18'sd1311;  5'h02: fw = 18'sd1966;  5'h03: fw = 18'sd2621;
@@ -644,7 +623,6 @@ function automatic logic signed [17:0] fw(input logic second, input logic [3:0] 
     endcase
 endfunction
 
-// state (voltages Q24)
 logic signed [31:0] cv1, cv2, vg1, vg2, vg3, cv3, cv4, vc17, u;
 logic        sig30, lfsr5i, star_ff, grid_sig, rflip;
 logic  [9:0] pixcnt;
@@ -655,19 +633,17 @@ logic  [1:0] cb[2][64];
 assign rd_type = cb[rd_bank][rd_col];
 assign rd_blue = blue_lut(blue_lv[rd_bank]);
 
-// one multiplier: m_a x m_b >>> 16 or 24 (operands registered by the previous state)
 logic signed [31:0] m_a;
 logic signed [17:0] m_b;
 logic               m_s24;
 wire  signed [49:0] m_p = 50'(m_a) * 50'(m_b);
 wire  signed [31:0] m_r = m_s24 ? 32'(m_p >>> 24) : 32'(m_p >>> 16);
 
-// CD4049: input registered (cd_issue), ROM registered, result (cd_v) two clocks after the issue
 logic  [8:0] cd_i;
 logic [47:0] cd_q;
 always_ff @(posedge clk) cd_q <= cd_lut(cd_i);
 logic  [9:0] cd_fr, cd_fr_q;
-logic  [1:0] cd_sat, cd_sat_q;          // 1: input <= 0 V (5 V out), 2: input >= 8 V (0 V out)
+logic  [1:0] cd_sat, cd_sat_q;
 always_ff @(posedge clk) begin cd_fr_q <= cd_fr; cd_sat_q <= cd_sat; end
 wire  signed [20:0] cd_d  = cd_q[20:0];
 wire  signed [31:0] cd_df = 32'(cd_d) * 32'($signed({1'b0, cd_fr_q}));
@@ -681,11 +657,11 @@ typedef enum logic [4:0] {
 rs_t         rs;
 logic  [3:0] it;
 logic  [8:0] ly;
-logic        wb;                        // bank written for line ly
-logic [11:0] cnt;                       // table entry (2048 = end)
+logic        wb;
+logic [11:0] cnt;
 logic  [9:0] xcur;
-logic        hoff;                      // table half: 0 -> 0x400 (MAME (flip ^ rflip) ? 0x000 : 0x400)
-wire   [9:0] lcw = {1'b0, ly} + 10'd249;                    // line count + 256 - 8 + 1, > 511 -> - VTOTAL
+logic        hoff;
+wire   [9:0] lcw = {1'b0, ly} + 10'd249;
 wire   [9:0] lc  = (lcw > 10'd511) ? lcw - 10'd264 : lcw;
 wire   [8:0] p4  = {gfx3_d[6:0], 2'b00};
 wire   [9:0] pix_n = pixcnt + 10'd384;
@@ -701,10 +677,10 @@ always_ff @(posedge clk) begin
     end else case (rs)
         R_IDLE: if (start) begin
             ly <= y; wb <= y[0]; rnd <= {rnd[14:0], rnd[15] ^ rnd[13] ^ rnd[12] ^ rnd[10]};
-            if (y == 9'd0) begin sig30 <= ~sig30; if (!sig30) lfsr5i <= rnd[0]; end   // VSYNC / 2 clocks the 5I LFSR
+            if (y == 9'd0) begin sig30 <= ~sig30; if (!sig30) lfsr5i <= rnd[0]; end
             rs <= R_CV1;
         end
-        R_CV1: begin                                        // cv1 toward 0 V (sig) or 4.8 V, RC1
+        R_CV1: begin
             rflip <= snd2 & lfsr5i;
             m_a <= (((snd2 & lfsr5i) ^ lc[7]) ? 32'sd0 : V4_8) - cv1; m_b <= K1; m_s24 <= 1'b1;
             rs <= R_CV2;
@@ -715,7 +691,6 @@ always_ff @(posedge clk) begin
             m_a <= vg2 - (cv1 - cv2_n); m_b <= fw(1'b0, 4'd0); m_s24 <= 1'b0;
             rs <= R_A1;
         end
-        // vg1 = u + f (vg2 - u); vg2 = CD4049(vg1)  (11 times)
         R_A1: begin
             vg1 <= u + m_r;
             cd_i <= 9'((u + m_r) >>> 18); cd_fr <= 10'((u + m_r) >>> 8);
@@ -728,7 +703,6 @@ always_ff @(posedge clk) begin
             if (it == 4'd10) begin it <= 4'd0; m_a <= vg3 - cd_v; m_b <= fw(1'b1, 4'd0); rs <= R_B1; end
             else begin it <= it + 4'd1; m_a <= cd_v - u; m_b <= fw(1'b0, it + 4'd1); rs <= R_A1; end
         end
-        // vg3i = vg2 + f (vg3 - vg2); vg3 = CD4049(vg3i)  (11 times)
         R_B1: begin
             cd_i <= 9'((vg2 + m_r) >>> 18); cd_fr <= 10'((vg2 + m_r) >>> 8);
             cd_sat <= ((vg2 + m_r) <= 0) ? 2'd1 : ((vg2 + m_r) >= 32'sd134217728) ? 2'd2 : 2'd0;
@@ -742,7 +716,7 @@ always_ff @(posedge clk) begin
         end
         R_C17: begin vc17 <= vc17_n; m_a <= vg3 - vc17_n + V10_3; m_b <= K51; rs <= R_BLUE; end
         R_BLUE: begin
-            blue_lv[wb] <= m_r[7:0];                        // (int)(vo / 5 x 255) into a uint8
+            blue_lv[wb] <= m_r[7:0];
             m_a <= (grid_on & ans) ? -cv3 : V5 - cv3; m_b <= (grid_on & ans) ? K32 : K31;
             rs <= R_CV3;
         end
@@ -769,7 +743,6 @@ always_ff @(posedge clk) begin
             for (int k = 0; k < 64; k++) cb[wb][k] <= 2'd0;
             rs <= R_WRD;
         end
-        // dot walk: table data two clocks after the address
         R_WRD: rs <= cnt[11] ? R_IDLE : R_WRD2;
         R_WRD2: rs <= R_WALK;
         R_WALK: begin
@@ -779,7 +752,6 @@ always_ff @(posedge clk) begin
             end else if (p4 > 9'd384) begin cnt <= cnt + 12'd1; rs <= R_SRD; end
             else rs <= R_IDLE;
         end
-        // end of line: skip entries past x 384
         R_SRD: rs <= cnt[11] ? R_IDLE : R_SRD2;
         R_SRD2: rs <= R_SKIP;
         R_SKIP: if (p4 > 9'd384) begin cnt <= cnt + 12'd1; rs <= R_SRD; end else rs <= R_IDLE;

@@ -1,64 +1,23 @@
-//============================================================================
-//
-//  Nintendo Popeye video (TPP2-VIDEO): 480i timing, text layer, background
 //  Copyright (C) 2026 Rodimus
-//
-//  Clocks (TPP2-VIDEO sheet 2): X1 20.160 MHz -> 7E LS161: QA = 10.08 MHz hi-res dot clock, QB = 5.04 MHz H counter.
-//  Here ce_pix = 10.08 MHz exactly (49.152 MHz x 105 / 512). H: 640 dots per line (320 H counts), active 0-511.
-//  V: interlaced, two fields of 263 / 262 lines (525), active field lines 16-239 (MAME visarea y 32-479 = 2 x line +
-//  field). field 0 = even frame lines. Blank / sync decode not traced yet (7B / 7C / 6B / 5C): sync placed mid-blanking
-//  with porches on both sides, field 1's VSYNC half a line early (MCR 480i pattern, HW-confirmed there):
-//
-//    axis      active    front porch       sync               back porch        total
-//    H         0-511     512-527 (16)      528-574 (47)       575-639 (65)      640
-//    V fld 0   16-239    240-243 (4)       244-246 (3)        247-262, 0-15     263
-//    V fld 1   16-239    240-242.5 (3.5)   242.5-245.5 (3)    245.5-261, 0-15   262
-//
-//  Pictures (reference MAME popeye_v.cpp):
-//    text: 32 x 32 tiles of 8 x 8 1bpp chars shown at 2 x 2 (16 x 16 dots), colour = colour RAM low nibble; char palette
-//          PROM 3A address A4 = A3 (two address pins tied together), pen 0 transparent.
-//    background: 4-bit pens from two 4K nibble RAMs (8P / 8S), low-res (2 x 2 dots); rovi = (y / 2, flipped) + scroll 1,
-//          roh = 0x38 + x / 2 + scroll 0 (MAME does not flip x), rovi bit 8 = 0 -> address 0; rovi bit 7 = nibble.
-//          Palette PROM 4A address = {palette bank bit 3, pen}.
-//    sprites: per frame line y, entries 1-159 of the DMA copy (4 bytes: x / 2, 256 - y / 2, code +
-//          flip x, attributes) that cover y go to a 64-slot list indexed by x / 8 (TPP2-VIDEO MB7063 1M / 3M / 1P / 3P);
-//          a later entry replaces an earlier one in its slot. Slots are drawn in order, 16 dots each from x - 6,
-//          transparent dots included (a slot's right half is overwritten by the next slot). Line y = 2 x line + field:
-//          sprites have the full 480i vertical resolution. Colour 0 = slot off. gfx2: planes 0x4000 apart (plane 0 =
-//          pen bit 1), left 8 dots in the second 0x2000, rows stored bottom-up; code = 9 bits ^ 0x1FF.
-//          Sprite palette = 5A (high nibble) / 5B (low nibble), address {palette bank 2-0, colour, pen}.
-//          Line buffers: two 512 x 5 ({colour, pen}); line L + 1 is built during line L, display reads and clears.
-//    priority: text over sprites over background.
-//  Colour: MAME res_net values (txt / obj: R, G 1K / 470 / 220 + 470, B 470 / 220 + 680; bak: 1.2K / 680 / 470 + 470,
-//  B 680 / 470 + 680; darlington, Sanyo EZV20), tools/resnet.py, all scaled by the same factor (brightest = 255).
-//  Pixel pipeline: the low-res pixel pair k + 1 is fetched during pair k (9+ clocks) and shown from its first dot.
-//
-//  tnx1 (Sky Skipper; no TNX1 schematic on hand, deltas from MAME):
-//    background: roh = 0x38 + x / 2 + scroll 0 + (scroll 2 bit 0 << 8), address {rovi 7-2, roh 7-2}, nibble = roh bit 8
-//    text palette 1A: address {palette bank bit 3, colour} (no A4 = A3 tie)
-//    sprite palette 2A / 3A: A6 = A5, A7 open  -> {0, bank 0, bank 0, colour, pen}
-//    gfx2 16K: 256 sprites, planes 0x2000 apart, left 8 dots in the second 0x1000
-//
-//============================================================================
+//  Based on MAME popeye_v.cpp (smf, Nicola Salmoria, Couriersud, BSD-3-Clause)
 
 module popeye_video
 (
-    input  logic        clk,            // 49.152 MHz
+    input  logic        clk,
     input  logic        reset,
 
-    input  logic        tnx1,           // Sky Skipper TNX1 board
-    input  logic        flip,           // AY port B bit 0
-    input  logic        crt_flip,       // MiSTer CRT Flip: whole picture turned 180 degrees
+    input  logic        tnx1,
+    input  logic        flip,
+    input  logic        crt_flip,
     input  logic  [7:0] scroll_x,       // dmasource[0]
     input  logic  [7:0] scroll_y,       // dmasource[1]
     input  logic        scroll_h,       // dmasource[2] bit 0 (TNX1 background x bit 8)
     input  logic  [3:0] pal_bank,       // dmasource[3] (bit 3 = text / background bank, 2-0 sprite bank)
 
     output logic        ce_pix,
-    output logic        vblank_start,   // one clock at field line 240 
+    output logic        vblank_start,
     output logic        field,          // 0 = even frame lines are being shown (CPU SYSTEM bit 4, VGA_F1)
 
-    // text RAM (video + colour) and background RAM read ports
     output logic  [9:0] txt_a,
     input  logic  [7:0] txt_code,
     input  logic  [3:0] txt_col,
@@ -66,20 +25,18 @@ module popeye_video
     input  logic  [3:0] bg_lo,
     input  logic  [3:0] bg_hi,
 
-    // ROM / PROM
     output logic [10:0] gfx1_a,
     input  logic  [7:0] gfx1_d,
-    output logic  [7:0] prom_a,         // 0x00-0x1F background, 0x20-0x3F text
+    output logic  [7:0] prom_a,
     input  logic  [7:0] prom_d,
 
-    // sprites: DMA copy (32-bit entries: byte 0 in bits 7-0), gfx2, sprite palette nibbles
     output logic  [7:0] spr_a,
     input  logic [31:0] spr_d,
     output logic [14:0] gfx2_a,
     input  logic  [7:0] gfx2_d,
     output logic  [7:0] spal_a,
-    input  logic  [3:0] spal_lo,        // 5B
-    input  logic  [3:0] spal_hi,        // 5A
+    input  logic  [3:0] spal_lo,
+    input  logic  [3:0] spal_hi,
 
     output logic  [7:0] r,
     output logic  [7:0] g,
@@ -90,7 +47,6 @@ module popeye_video
     output logic        vsync
 );
 
-// ------------------------------------------------------------------ timing
 logic [8:0] acc = 9'd0;
 always_ff @(posedge clk) begin
     {ce_pix, acc} <= {1'b0, acc} + 10'd105;
@@ -118,17 +74,15 @@ always_ff @(posedge clk) begin
     end
 end
 
-// sync as positions (line, h): field 0 at the line start, field 1 half a line earlier
 wire [18:0] pos      = {line, h};
 wire [18:0] vs_start = field ? {9'd242, 10'd320} : {9'd244, 10'd0};
 wire [18:0] vs_stop  = field ? {9'd245, 10'd320} : {9'd247, 10'd0};
 
-// ------------------------------------------------------------------ text / background fetch
-wire       fl_t = flip ^ crt_flip;      // text: both axes
-wire       fl_y = flip ^ crt_flip;      // background rows
-wire       fl_x = crt_flip;             // background columns (MAME: the board flip does not mirror them)
+wire       fl_t = flip ^ crt_flip;
+wire       fl_y = flip ^ crt_flip;
+wire       fl_x = crt_flip;
 
-logic [7:0] fx, fy;                     // low-res column / field line being fetched
+logic [7:0] fx, fy;
 logic [2:0] seq = 3'd0;
 logic [2:0] ccol;
 logic [3:0] tcol, bpen;
@@ -137,7 +91,7 @@ logic       tpen;
 logic [7:0] nxt_r, nxt_g, nxt_b, cur_r, cur_g, cur_b;
 logic       nxt_tp, cur_tp;
 
-wire [8:0] lx_nx = {h[9:1]} + 9'd1;                       // next pair 1..320
+wire [8:0] lx_nx = {h[9:1]} + 9'd1;
 wire       wrap  = lx_nx == 9'd320;
 wire [8:0] ln_nx = (line == last_line) ? 9'd0 : line + 9'd1;
 
@@ -151,7 +105,6 @@ always_comb begin
     bg_a  = !rovi[8] ? 12'd0 : tnx1 ? {rovi[7:2], roh[7:2]} : {rovi[6:1], roh[7:2]};
 end
 
-// resistor network levels (header)
 function automatic [7:0] t_rg(input [2:0] x);
     case (x)
         3'd0: t_rg = 8'd241; 3'd1: t_rg = 8'd211; 3'd2: t_rg = 8'd179; 3'd3: t_rg = 8'd149;
@@ -178,28 +131,27 @@ endfunction
 always_ff @(posedge clk) begin
     if (reset) seq <= 3'd0;
     else if (ce_pix && !h[0]) begin
-        // a pair starts: fetch the next one
         fx  <= wrap ? 8'd0 : lx_nx[7:0];
         fy  <= (wrap ? ln_nx[7:0] : line[7:0]);
         seq <= 3'd1;
     end else case (seq)
-        3'd1: seq <= 3'd2;                                  // RAMs latch the addresses (combinational from fx / fy)
-        3'd2: begin                                         // RAM data
+        3'd1: seq <= 3'd2;
+        3'd2: begin
             gfx1_a <= {txt_code, cy[2:0]};
             ccol   <= cx[2:0];
             tcol   <= txt_col;
             nib    <= tnx1 ? roh[8] : rovi[7];
             seq    <= 3'd3;
         end
-        3'd3: seq <= 3'd4;                                  // char ROM latches its address
-        3'd4: begin                                         // char ROM data: pick the layer, PROM address
+        3'd3: seq <= 3'd4;
+        3'd4: begin
             tpen   <= gfx1_d[ccol];
             bpen   <= nib ? bg_hi : bg_lo;
             prom_a <= gfx1_d[ccol] ? {3'b001, tnx1 ? pal_bank[3] : tcol[3], tcol} : {3'b000, pal_bank[3], nib ? bg_hi : bg_lo};
             seq    <= 3'd5;
         end
-        3'd5: seq <= 3'd6;                                  // PROM latches its address
-        3'd6: begin                                         // PROM data
+        3'd5: seq <= 3'd6;
+        3'd6: begin
             if (tpen) begin nxt_r <= t_rg(prom_d[2:0]); nxt_g <= t_rg(prom_d[5:3]); nxt_b <= t_b(prom_d[7:6]); end
             else      begin nxt_r <= b_rg(prom_d[2:0]); nxt_g <= b_rg(prom_d[5:3]); nxt_b <= b_b(prom_d[7:6]); end
             nxt_tp <= tpen;
@@ -209,8 +161,6 @@ always_ff @(posedge clk) begin
     endcase
 end
 
-// ------------------------------------------------------------------ sprites
-// line buffers A / B: {colour, pen} per dot; dsel = buffer on display, the other one is being built
 logic [4:0] lbA[512], lbB[512];
 logic       dsel = 1'b0;
 logic [8:0] rd_x, clr_x;
@@ -220,10 +170,10 @@ logic       b_we;
 logic [8:0] b_wa;
 logic [4:0] b_wd;
 
-wire [9:0] hn      = (h == 10'd639) ? 10'd0 : h + 10'd1;          // dot whose sprite pixel is fetched now
+wire [9:0] hn      = (h == 10'd639) ? 10'd0 : h + 10'd1;
 wire       dsel_n  = (h == 10'd639) ? ~dsel : dsel;
 
-// read the dot one clock after ce_pix, clear it the clock after that (never the same clock as its read)
+// read the dot one clock after ce_pix, clear it the clock after (never on its read clock)
 always_ff @(posedge clk) begin
     rd_go <= 1'b0;
     if (ce_pix) begin
@@ -235,8 +185,6 @@ always_ff @(posedge clk) begin
     clr_go <= rd_go; clr_x <= rd_x; clr_sel <= rd_sel;
 end
 
-// each buffer: one read port, one write port; the clear (buffer on display) and the build (the other buffer) never
-// target the same buffer
 wire clrA = clr_go && !clr_sel, clrB = clr_go && clr_sel;
 wire bA   = b_we && dsel,       bB   = b_we && !dsel;
 always_ff @(posedge clk) begin
@@ -248,7 +196,6 @@ always_ff @(posedge clk) begin
     qB <= lbB[rd_x];
 end
 
-// sprite palette for the fetched dot: address from the buffer output, colour registered one clock later
 wire [4:0] lq = rd_sel ? qB : qA;
 assign spal_a = tnx1 ? {1'b0, pal_bank[0], pal_bank[0], lq} : {pal_bank[2:0], lq};
 logic       spr_pen;
@@ -262,12 +209,11 @@ always_ff @(posedge clk) begin
     spr_b   <= t_b(spal_hi[3:2]);
 end
 
-// build: scan entries 1-159 into the slot list, then draw the slots
 wire        fl_s  = flip ^ crt_flip;
-logic [8:0] y_img;                                  // frame line of the image being built
+logic [8:0] y_img;
 logic [7:0] scan_i;
 logic [63:0] s_val;
-logic [19:0] slot[64];                              // {x low 2, row, code, colour, flip x}  (19-18, 17-14, 13-5, 4-2, 1); flip y folded into row
+logic [19:0] slot[64];
 logic [19:0] slot_q;
 logic [5:0] d_i;
 logic [2:0] d_rd;
@@ -285,17 +231,17 @@ wire signed [11:0] sy1  = sy0 ^ 12'sh1FF;
 wire signed [11:0] yi   = $signed({3'b000, y_img});
 wire signed [11:0] srow = flip ? sy1 - yi : yi - sy0;
 wire        s_hit = srow >= 12'sd0 && srow < 12'sd16;
-wire  [8:0] s_code = {e3[2], e3[4], e2[6:0]} ^ 9'h1FF;          // (b2 & 7F) + (b3 bit 4 << 3) + (b3 bit 2 << 6)
+wire  [8:0] s_code = {e3[2], e3[4], e2[6:0]} ^ 9'h1FF;
 
 wire  [3:0] q_row  = slot_q[17:14];
 wire  [8:0] q_code = slot_q[13:5];
 wire  [2:0] q_col  = slot_q[4:2];
 wire        q_fx   = slot_q[1];
-assign gfx2_a = tnx1 ? {1'b0, d_rd[1], d_rd[0], q_code[7:0], ~q_row}  // plane, quarter (0 = dots 8-15), code, row bottom-up
+assign gfx2_a = tnx1 ? {1'b0, d_rd[1], d_rd[0], q_code[7:0], ~q_row}
                    : {d_rd[1], d_rd[0], q_code, ~q_row};
 
 wire  [3:0] pj    = q_fx ? ~d_px[3:0] : d_px[3:0];
-wire  [7:0] gp0   = pj[3] ? d_g[0] : d_g[1];                         // plane 0 (pen bit 1)
+wire  [7:0] gp0   = pj[3] ? d_g[0] : d_g[1];
 wire  [7:0] gp1   = pj[3] ? d_g[2] : d_g[3];
 wire  [1:0] dpen  = {gp0[pj[2:0]], gp1[pj[2:0]]};
 wire signed [10:0] dpx = $signed({2'b00, d_i, slot_q[19:18], 1'b0}) + $signed({7'd0, d_px[3:0]}) - 11'sd6;
@@ -305,12 +251,10 @@ always_ff @(posedge clk) begin
     if (reset) sp <= SP_IDLE;
     else case (sp)
         SP_IDLE: if (ce_pix && h == 10'd639) begin
-            // the line after the one starting now
             y_img  <= {ln_nx[7:0] + 8'd1, field} ^ {9{crt_flip}};
             scan_i <= 8'd1; s_val <= 64'd0; sp <= SP_SCAN;
         end
         SP_SCAN: begin
-            // spr_a = scan_i, data for scan_i - 1 this clock
             if (scan_i >= 8'd2 && s_hit) begin
                 slot[e0[7:2]] <= {e0[1:0], srow[3:0] ^ {4{e3[3]}}, s_code, e3[2:0], e2[7], 1'b0};
                 s_val[e0[7:2]] <= 1'b1;
@@ -326,7 +270,6 @@ always_ff @(posedge clk) begin
             else begin d_i <= d_i + 6'd1; sp <= SP_RD; end
         end
         SP_FETCH: begin
-            // 4 reads {plane, quarter} = 00, 01, 10, 11; data 1 clock later
             if (d_rd != 3'd0) d_g[d_rd[1:0] - 2'd1] <= gfx2_d;
             d_rd <= d_rd + 3'd1;
             if (d_rd == 3'd4) begin d_px <= 5'd0; sp <= SP_PIX; end
@@ -347,8 +290,6 @@ always_ff @(posedge clk) begin
     endcase
 end
 
-// ------------------------------------------------------------------ output: one register per dot
-// A pair's text / background colour is final on its first dot (h even) and held for the second; sprites per dot.
 wire act = !h[9] && line >= 9'd16 && line < 9'd240;
 wire [7:0] pr = h[0] ? cur_r : nxt_r, pg = h[0] ? cur_g : nxt_g, pb = h[0] ? cur_b : nxt_b;
 wire       ptp = h[0] ? cur_tp : nxt_tp;

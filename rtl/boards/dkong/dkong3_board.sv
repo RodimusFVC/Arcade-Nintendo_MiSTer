@@ -1,36 +1,14 @@
-//============================================================================
-//
-//  Nintendo Donkey Kong 3 board (DKC1-CPU / DKC1-Video; MAME dkong.cpp dkong3)
+//  Based on MAME dkong.cpp (Couriersud, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
-//
-//  Main Z80 at 4 MHz from its own 8 MHz crystal (LS74 3H / 2; DKC1-CPU sheet), not the video's 1H. A Z80 DMA
-//  (z80dma.sv, same 4 MHz clock) copies the sprite list 6900 -> 7000 every frame (burst, 0x1A0 bytes, RDY = 7E85).
-//  Memory map:
-//    0000-5FFF ROM   6000-6FFF RAM   7000-73FF object RAM (two 0x200 banks)   7400-77FF video RAM   8000-9FFF ROM
-//    7C00 R IN0 / W sound latch 1   7C80 R IN1 / W sound latch 2   7D00 R DSW0 / W sound latch 3
-//    7D80 R DSW1 / W bit 0 = 2A03 reset (low = held)
-//    7E80-7E87 (data bit 0): 0 coin counter, 1 char bank (inverted), 2 flip, 3 sprite bank, 4 NMI mask, 5 DMA RDY,
-//                            6-7 palette bank
-//    I/O port 00: Z80 DMA
-//  Video = dkong_video.sv in DK3 mode (TKG-04 timing; DKC1-Video is the same raster logic).
-//  Sound: two RP2A03 (pooled T65 cores + rp2a03.sv) on their own 21.477 MHz crystal (CPU = / 12), NMI = VBLANK,
-//    held in reset while 7D80 bit 0 = 0. Each: 0000-07FF RAM (mirrored to 7FFF), 8000-9FFF ROM (mirrored to FFFF),
-//    $4016 / $4017 = sound latch 1 / 2 (#1), latch 3 / none (#2). AUX A / B of both chips (100 Ohm pad loads) are
-//    summed with equal weights into the LM3900 chain (6P; mixing resistors not legible on the 150 dpi scan), DC-blocked.
-//  Braze kit (dkong3hs, rom_dec 4): kit ROM 64K at 0000-5FFF and 8000-FFFF (straight, decoded by
-//    dkong_kits_pkg), 93C46 at C000 (write bit 0 DI, 1 CLK, 2 CS; read bit 0 = DO).
-//
-//============================================================================
 
 module dkong3_board
 (
-    input  logic        clk,            // 49.152 MHz
+    input  logic        clk,
     input  logic        reset,
     input  logic        pause,
     input  logic        crt_flip,
     input  logic  [3:0] rom_dec,        // conversion kit (dkong_kits_pkg), 0 = none
 
-    // Braze kit 93C46 (rtl/nintendo_dispatcher.sv)
     output logic        eep_cs,
     output logic        eep_clk,
     output logic        eep_di,
@@ -38,9 +16,9 @@ module dkong3_board
 
     output chip_pool_pkg::z80pa_i_t z80pa_0_i,
     input  chip_pool_pkg::z80pa_o_t z80pa_0_o,
-    output chip_pool_pkg::t65_i_t   t65_0_i,        // RP2A03 #1 (5J)
+    output chip_pool_pkg::t65_i_t   t65_0_i,
     input  chip_pool_pkg::t65_o_t   t65_0_o,
-    output chip_pool_pkg::t65_i_t   t65_1_i,        // RP2A03 #2
+    output chip_pool_pkg::t65_i_t   t65_1_i,
     input  chip_pool_pkg::t65_o_t   t65_1_o,
 
     input  logic  [7:0] in0,
@@ -48,22 +26,21 @@ module dkong3_board
     input  logic  [7:0] dsw0,
     input  logic  [7:0] dsw1,
 
-    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
-    output logic [15:0] rom_a,          // 8000-9FFF read at ROM 6000 (MRA placement)
+    output logic [15:0] rom_a,
     input  logic  [7:0] rom_d,
-    output logic [12:0] snd1_a,         // 2A03 #1 ROM (soundcpu slot)
+    output logic [12:0] snd1_a,
     input  logic  [7:0] snd1_d,
-    output logic [12:0] snd2_a,         // 2A03 #2 ROM
+    output logic [12:0] snd2_a,
     input  logic  [7:0] snd2_d,
     output logic [12:0] gfx1_a,
     input  logic  [7:0] gfx1_d,
     output logic [14:0] gfx2_a,
     input  logic  [7:0] gfx2_d,
-    output logic  [7:0] pal_a,          // proms 0x000 1d, 0x200 1c (first 256 of each, as MAME)
+    output logic  [7:0] pal_a,
     input  logic  [7:0] prom_lo_d,
     input  logic  [7:0] prom_hi_d,
     output logic  [7:0] cc_a,
-    input  logic  [3:0] prom_cc_d,      // proms 0x400 2n
+    input  logic  [3:0] prom_cc_d,
 
     output logic        ce_pix,
     output logic  [7:0] video_r,
@@ -81,18 +58,15 @@ module dkong3_board
     output logic  [7:0] hs_data_out,
     input  logic        hs_write,
 
-    // pooled Z80 DMA (dispatcher)
     output chip_pool_pkg::z80dma_i_t z80dma_0_i,
     input  chip_pool_pkg::z80dma_o_t z80dma_0_o,
 
-    // board RAM pool (dispatcher, ram_pool_pkg)
     output ram_pool_pkg::pram_i_t [8:0] pr_i,
     input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
 
-// ------------------------------------------------------------------ 4 MHz CPU clock: 8 MHz edges from a phase accumulator
 logic [15:0] ph_acc = 16'd0;
 logic        phi = 1'b0;
 logic        cen_p, cen_n;
@@ -107,7 +81,6 @@ end
 
 logic vram_busy, vblk;
 
-// ------------------------------------------------------------------ Z80
 wire [15:0] cpu_a    = z80pa_0_o.a;
 wire        mreq     = ~z80pa_0_o.mreq_n;
 wire        iorq     = ~z80pa_0_o.iorq_n;
@@ -115,23 +88,21 @@ wire        m1       = ~z80pa_0_o.m1_n;
 wire        rd       = ~z80pa_0_o.rd_n;
 wire        wr       = ~z80pa_0_o.wr_n;
 wire        rfsh     = ~z80pa_0_o.rfsh_n;
-wire        braze    = rom_dec == dkong_kits_pkg::DEC_BRAZE;   // dkong3hs
+wire        braze    = rom_dec == dkong_kits_pkg::DEC_BRAZE;
 wire        busak    = ~z80pa_0_o.busak_n;
 
 logic wr_q = 1'b0, rd_q = 1'b0, iow_q = 1'b0, ior_q = 1'b0;
 always_ff @(posedge clk) begin wr_q <= wr & mreq; rd_q <= rd & mreq; iow_q <= wr & iorq; ior_q <= rd & iorq; end
-wire cpu_we = wr & mreq & ~wr_q;        // one clock per write cycle
+wire cpu_we = wr & mreq & ~wr_q;
 wire io_we  = wr & iorq & ~m1 & ~iow_q;
 wire io_re  = rd & iorq & ~m1 & ~ior_q;
 
-// ------------------------------------------------------------------ Z80 DMA (I/O port 00)
 logic [15:0] dma_a;
 logic  [7:0] dma_dout, dma_data, mem_q;
 logic        dma_busrq, dma_busy, dma_mreq, dma_memw;
 logic        dma_rdy;
 wire         dma_cs = iorq && !m1 && cpu_a[7:0] == 8'h00 && !busak;
 
-// Z80 DMA: pooled z80dma_0 (dispatcher)
 assign z80dma_0_i.reset = reset;
 assign z80dma_0_i.cen_p = cen_p & run;
 assign z80dma_0_i.cs = dma_cs;
@@ -149,17 +120,16 @@ assign dma_memw = z80dma_0_o.memw_s;
 assign z80dma_0_i.bus_d = mem_q;
 assign dma_data = z80dma_0_o.data;
 
-// ------------------------------------------------------------------ bus (CPU or DMA)
 wire        dma_own = dma_busy & busak;
 wire [15:0] bus_a   = dma_own ? dma_a : cpu_a;
 wire        bus_we  = dma_own ? dma_memw & dma_mreq : cpu_we;
 wire  [7:0] bus_d   = dma_own ? dma_data : z80pa_0_o.dout;
 
-wire sel_rom  = bus_a < 16'h6000 || bus_a[15:13] == 3'b100 || (braze && bus_a[15]);   // 0000-5FFF, 8000-9FFF
+wire sel_rom  = bus_a < 16'h6000 || bus_a[15:13] == 3'b100 || (braze && bus_a[15]);
 wire sel_ram  = bus_a[15:12] == 4'h6;
-wire sel_obj  = bus_a[15:10] == 6'b011100;                         // 7000-73FF
-wire sel_vram = bus_a[15:10] == 6'b011101;                         // 7400-77FF
-wire sel_io   = bus_a[15:10] == 6'b011111;                         // 7C00-7FFF
+wire sel_obj  = bus_a[15:10] == 6'b011100;
+wire sel_vram = bus_a[15:10] == 6'b011101;
+wire sel_io   = bus_a[15:10] == 6'b011111;
 
 logic [7:0] ram_q, vram_q, obj_q;
 logic [31:0] spr_d;
@@ -169,24 +139,20 @@ logic  [7:0] vram_vd;
 
 assign pr_i[8] = '0;
 
-// work RAM: pool block 0 (port B = hiscore)
 assign pr_i[0].a_addr = {3'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
 assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
 assign ram_q = pr_o[0].a_q;
 assign hs_data_out = pr_o[0].b_q;
 
-// video RAM: pool block 1 (port B = tilemap)
 assign pr_i[1].a_addr = {5'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
 assign pr_i[1].b_addr = {5'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
 assign vram_q = pr_o[1].a_q;
 assign vram_vd = pr_o[1].b_q;
 
-// object RAM as four byte lanes: one 32-bit sprite entry per video read
 logic [7:0] obj_lane_q[4];
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : objl
-        // object RAM lane ln: pool block 2 + ln (port B = sprite engine)
         assign pr_i[2 + ln].a_addr = {7'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
         assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
         assign obj_lane_q[ln] = pr_o[2 + ln].a_q;
@@ -197,7 +163,6 @@ logic [1:0] obj_lane;
 always_ff @(posedge clk) obj_lane <= bus_a[1:0];
 assign obj_q = obj_lane_q[obj_lane];
 
-// ------------------------------------------------------------------ latches
 logic [7:0] snd_lat1, snd_lat2, snd_lat3, lat_7e8;
 logic       snd_run;
 always_ff @(posedge clk) begin
@@ -222,7 +187,6 @@ wire       nmi_mask  = lat_7e8[4];
 assign     dma_rdy   = lat_7e8[5];
 wire [1:0] pal_bank  = lat_7e8[7:6];
 
-// NMI: VBLK edge sets it while the mask is on
 logic nmi_q = 1'b0, vblk_q = 1'b0;
 always_ff @(posedge clk) begin
     vblk_q <= vblk;
@@ -230,17 +194,15 @@ always_ff @(posedge clk) begin
     else if (vblk && !vblk_q) nmi_q <= 1'b1;
 end
 
-// /WAIT: VRAM access while the video board is fetching (LS74 2D clocked by the CPU clock, cleared in VBLK)
 logic wait_q = 1'b0;
 always_ff @(posedge clk) begin
     if (reset) wait_q <= 1'b0;
     else if (cen_n && run) wait_q <= (mreq | rd | wr) && !rfsh && !busak && cpu_a[15:10] == 6'b011101 && vram_busy && !vblk;
 `ifdef SIM_NO_VRAM_WAIT
-    wait_q <= 1'b0;                     // sim only: MAME has no VRAM wait states (compare runs)
+    wait_q <= 1'b0;
 `endif
 end
 
-// ------------------------------------------------------------------ CPU read data
 logic [7:0] io_q;
 always_comb begin
     case (cpu_a[8:7])
@@ -251,7 +213,6 @@ always_comb begin
     endcase
 end
 
-// Braze kit EEPROM pins (C000)
 wire  sel_eep = braze && cpu_a == 16'hC000;
 logic eep_cs_q = 1'b0, eep_clk_q = 1'b0, eep_di_q = 1'b0;
 always_ff @(posedge clk) begin
@@ -285,7 +246,6 @@ assign z80pa_0_i.int_n   = 1'b1;
 assign z80pa_0_i.nmi_n   = ~nmi_q;
 assign z80pa_0_i.busrq_n = ~dma_busrq;
 
-// ------------------------------------------------------------------ video
 dkong_video video
 (
     .clk(clk), .reset(reset),
@@ -299,8 +259,6 @@ dkong_video video
     .r(video_r), .g(video_g), .b(video_b), .hblank(video_hblank), .vblank(video_vblank), .hsync(video_hs), .vsync(video_vs)
 );
 
-// ------------------------------------------------------------------ sound: two RP2A03
-// CPU clock 21477272 / 12 = 1789773 Hz from the 49.152 MHz system clock
 logic [25:0] apu_acc = 26'd0;
 logic        apu_ce = 1'b0;
 always_ff @(posedge clk) begin
@@ -330,11 +288,9 @@ rp2a03 apu1
     .ext_a(s_a[1]), .ext_rw(s_rw[1]), .ext_dout(s_do[1]), .ext_din(s_di[1]), .aux_a(s_aux_a[1]), .aux_b(s_aux_b[1])
 );
 
-// RAM: written on every write below 8000 (APU register writes included: the external bus sees them)
 genvar sc;
 generate
     for (sc = 0; sc < 2; sc++) begin : sram
-        // 2A03 RAM: pool block 6 + sc
         assign pr_i[6 + sc].a_addr = {4'd0, s_a[sc][10:0]}; assign pr_i[6 + sc].a_d = s_do[sc]; assign pr_i[6 + sc].a_we = apu_ce && !s_rw[sc] && !s_a[sc][15];
         assign pr_i[6 + sc].b_addr = 15'd0; assign pr_i[6 + sc].b_d = 8'h00; assign pr_i[6 + sc].b_we = 1'b0;
         assign s_ram_q[sc] = pr_o[6 + sc].a_q;
@@ -348,7 +304,6 @@ always_comb begin
     s_di[1] = s_a[1][15] ? snd2_d : (s_a[1] == 16'h4016) ? snd_lat3 : (s_a[1] == 16'h4017) ? 8'h00   : s_ram_q[1];
 end
 
-// mix: four AUX pads (20000 per volt each, 0..~1.2 V), DC blocker (~9 Hz at the CPU clock rate)
 logic [17:0] mix_sum;
 logic signed [31:0] mix_lp = 32'sd0;
 logic signed [18:0] mix_hp;

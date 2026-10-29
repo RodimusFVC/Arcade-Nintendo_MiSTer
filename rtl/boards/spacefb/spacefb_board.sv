@@ -1,22 +1,9 @@
-//============================================================================
-//
-//  Nintendo Space Firebird board (Gremlin TST-CPU 834-0031 / TST-VIDEO 834-0030; MAME spacefb.cpp)
+//  Based on MAME spacefb.cpp (Chris Hardy, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
-//
-//  Main Z80 at 3 MHz (6 MHz / 2). Memory map:
-//    0000-3FFF ROM   8000-83FF object RAM (mirror 3C00)   C000-C7FF RAM (mirror 3000; C800-CFFF open)
-//  I/O (global mask 7): R 0 P1, 1 P2, 2 SYSTEM, 3 DSW, 4-7 open; W 0 / 4 port 0 (video: flip, object bank, colour
-//  bank), W 1 / 5 port 1 (sound board: spacefb_sound.sv), W 2 / 6 port 2 (star field contrast / background / off).
-//  Interrupts: IRQ held until acknowledged at lines 0x80 and 0xF0, vector
-//  0xC7 | (line bit 6 << 4) | (!line bit 6 << 3): RST 08 at 0x80, RST 10 at 0xF0.
-//  Ports 0-2 are cleared on reset .
-//  No CPU wait states (MAME has none; the block diagram's "ready" path is not traced yet #unverified).
-//
-//============================================================================
 
 module spacefb_board
 (
-    input  logic        clk,            // 49.152 MHz
+    input  logic        clk,
     input  logic        reset,
     input  logic        pause,
     input  logic        crt_flip,
@@ -26,21 +13,20 @@ module spacefb_board
     output chip_pool_pkg::mcs48_i_t mcs48_0_i,
     input  chip_pool_pkg::mcs48_o_t mcs48_0_o,
 
-    input  logic  [7:0] in0,            // P1
-    input  logic  [7:0] in1,            // P2
-    input  logic  [7:0] in2,            // SYSTEM
-    input  logic  [7:0] dsw0,           // DSW
+    input  logic  [7:0] in0,
+    input  logic  [7:0] in1,
+    input  logic  [7:0] in2,
+    input  logic  [7:0] dsw0,
 
-    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
     output logic [14:0] rom_a,
     input  logic  [7:0] rom_d,
-    output logic [14:0] gfx2_a,         // sprites 5K (0x000) / 6K (0x800)
+    output logic [14:0] gfx2_a,
     input  logic  [7:0] gfx2_d,
-    output logic [12:0] gfx1_a,         // bullets 4I (0x00-0xFF)
+    output logic [12:0] gfx1_a,
     input  logic  [7:0] gfx1_d,
-    output logic  [7:0] pal_a,          // colour PROM 3N (0x00-0x1F)
+    output logic  [7:0] pal_a,
     input  logic  [7:0] pal_d,
-    output logic [11:0] snd_pa,         // sound 2708 IC20
+    output logic [11:0] snd_pa,
     input  logic  [7:0] snd_pd,
 
     output logic        ce_pix,
@@ -53,7 +39,7 @@ module spacefb_board
     output logic        video_vblank,
 
     output logic signed [15:0] audio,
-    output logic signed [39:0] mul_a,   // shared multiplier (rtl/nintendo_dispatcher.sv)
+    output logic signed [39:0] mul_a,
     output logic signed [26:0] mul_b,
     input  logic signed [66:0] mul_p,
 
@@ -62,14 +48,12 @@ module spacefb_board
     output logic  [7:0] hs_data_out,
     input  logic        hs_write,
 
-    // board RAM pool (dispatcher, ram_pool_pkg)
     output ram_pool_pkg::pram_i_t [8:0] pr_i,
     input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
 
-// ------------------------------------------------------------------ 3 MHz CPU clock: 6 MHz edges from a phase accumulator
 logic [15:0] ph_acc = 16'd0;
 logic        phi = 1'b0;
 logic        cen_p, cen_n;
@@ -82,7 +66,6 @@ always_ff @(posedge clk) begin
     end else ph_acc <= ph_acc + 16'd6000;
 end
 
-// ------------------------------------------------------------------ Z80
 wire [15:0] cpu_a = z80pa_0_o.a;
 wire  [7:0] cpu_d = z80pa_0_o.dout;
 wire        mreq  = ~z80pa_0_o.mreq_n;
@@ -93,35 +76,31 @@ wire        wr    = ~z80pa_0_o.wr_n;
 
 logic wr_q = 1'b0, iow_q = 1'b0;
 always_ff @(posedge clk) begin wr_q <= wr & mreq; iow_q <= wr & iorq; end
-wire cpu_we = wr & mreq & ~wr_q;        // one clock per write cycle
+wire cpu_we = wr & mreq & ~wr_q;
 wire io_we  = wr & iorq & ~m1 & ~iow_q;
 
-wire sel_rom = cpu_a[15:14] == 2'b00;                               // 0000-3FFF
-wire sel_obj = cpu_a[15:14] == 2'b10;                               // 8000-83FF, mirror 3C00
-wire sel_ram = cpu_a[15:14] == 2'b11 && !cpu_a[11];                 // C000-C7FF, mirror 3000
+wire sel_rom = cpu_a[15:14] == 2'b00;
+wire sel_obj = cpu_a[15:14] == 2'b10;
+wire sel_ram = cpu_a[15:14] == 2'b11 && !cpu_a[11];
 
 assign rom_a = {1'b0, cpu_a[13:0]};
 
-// ------------------------------------------------------------------ RAMs
 logic [7:0] ram_q;
 assign pr_i[1] = '0;
 assign pr_i[6] = '0;
 assign pr_i[7] = '0;
 assign pr_i[8] = '0;
-// work RAM: pool block 0 (port B = hiscore)
 assign pr_i[0].a_addr = {4'd0, cpu_a[10:0]}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram;
 assign pr_i[0].b_addr = {4'd0, hs_address[10:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
 assign ram_q = pr_o[0].a_q;
 assign hs_data_out = pr_o[0].b_q;
 
-// object RAM: four 256-byte pages (x, y, code, attributes), all read at once by the video
 logic [7:0] obj_va;
 logic [7:0] obj_cq [4];
 logic [7:0] obj_vq [4];
 genvar pg;
 generate
     for (pg = 0; pg < 4; pg++) begin : objp
-        // object RAM page pg: pool block 2 + pg (port B = video)
         assign pr_i[2 + pg].a_addr = {7'd0, cpu_a[7:0]}; assign pr_i[2 + pg].a_d = cpu_d; assign pr_i[2 + pg].a_we = cpu_we && sel_obj && cpu_a[9:8] == pg;
         assign pr_i[2 + pg].b_addr = {7'd0, obj_va}; assign pr_i[2 + pg].b_d = 8'h00; assign pr_i[2 + pg].b_we = 1'b0;
         assign obj_cq[pg] = pr_o[2 + pg].a_q;
@@ -129,7 +108,6 @@ generate
     end
 endgenerate
 
-// ------------------------------------------------------------------ output ports
 logic [7:0] port0, port1, port2;
 always_ff @(posedge clk) begin
     if (reset) begin port0 <= 8'd0; port1 <= 8'd0; port2 <= 8'd0; end
@@ -143,12 +121,9 @@ always_ff @(posedge clk) begin
     end
 end
 
-// ------------------------------------------------------------------ interrupts (held until INTA)
 logic       irq_80, irq_f0, v2;
 logic       int_q = 1'b0;
 logic [7:0] int_vec = 8'hFF;
-// INTA = M1 + IORQ without MREQ: T80pa's IntCycleD_n has no reset / power-up value, so the first opcode fetch after a
-// cold reset can show IORQ low with MREQ (sim: the vector byte replaced opcode 00 -> RST 38 boot)
 wire        inta = m1 & iorq & ~mreq;
 always_ff @(posedge clk) begin
     if (reset) int_q <= 1'b0;
@@ -159,7 +134,6 @@ always_ff @(posedge clk) begin
     end
 end
 
-// ------------------------------------------------------------------ CPU read data
 logic [7:0] io_q;
 always_comb begin
     case (cpu_a[2:0])
@@ -188,7 +162,6 @@ assign z80pa_0_i.int_n   = ~int_q;
 assign z80pa_0_i.nmi_n   = 1'b1;
 assign z80pa_0_i.busrq_n = 1'b1;
 
-// ------------------------------------------------------------------ video
 spacefb_video video
 (
     .clk(clk), .reset(reset),
@@ -200,7 +173,6 @@ spacefb_video video
     .hblank(video_hblank), .vblank(video_vblank), .hsync(video_hs), .vsync(video_vs)
 );
 
-// ------------------------------------------------------------------ sound board
 spacefb_sound sound
 (
     .clk(clk), .reset(reset), .pause(pause),

@@ -1,62 +1,33 @@
-//============================================================================
-//
-//  Nintendo Popeye board (TPP2-CPU / TPP2-VIDEO; reference MAME popeye.cpp)
+//  Based on MAME popeye.cpp (smf, Nicola Salmoria, Couriersud, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
-//
-//  Main Z80 at 4 MHz from its own 8 MHz crystal (TPP2-CPU sheet 1: LS109 5F / 2), async to the 20.16 MHz video.
-//  Program ROM read through the board's address / data scramble (PLAs 6E / 6F / 6H):
-//    ROM address = bitswap(A, 15,14,13,12,11,10,8,7,6,3,9,5,4,2,1,0) ^ 0x3F, data = bitswap(D, 3,4,2,5,1,6,0,7)
-//  Memory map (MAME tpp2 maincpu_program_map):
-//    0000-7FFF ROM   8800-8FFF RAM (8C00-8E7F = sprite DMA source; 8C00-8C03 = scroll x / y / -, palette bank)
-//    A000-A3FF text codes (W)   A400-A7FF text colours (W)   C000-DFFF background nibbles (W; A12 = high nibble)
-//    E000-E001 protection ALU 7K (W 0 = shift, W 1 = data, R 0 = shifted data, R 1 = status 0; MAME protection_*)
-//    I/O 00 W AY address / R P1, 01 W AY data / R P2, 02 R SYSTEM (bit 4 = field), 03 R AY data
-//  NMI enable / watchdog enable = A8 / A9 of the Z80 refresh address (I register). NMI at vblank.
-//  Watchdog (MAME tpp2 screen_vblank): a 4-bit vblank counter, cleared while NMI is enabled or the watchdog is
-//  off; its bit 2 holds the CPU and the AY in reset.
-//  AY-3-8910 7L at 2 MHz: port A = DSW0 with bit 7 = the DSW1 switch picked by port B bits 1-3, port B bit 0 = flip.
-//  Sprite DMA (TPP2-CPU sheet 1: 1L LS74 on VB -> BUSRQ; 1F / 2F / 2E LS161 count, 3E / 4E PLAs drive AD0-AD9, 1E LS138
-//  /DMCS0-3 = byte lane, DM0-7 = entry): at vblank the CPU is held off the bus and 8C00-8E7F (0x280 bytes) is copied
-//  into the video board's sprite RAM; bytes 0 / 1 / 3 are the scroll x / y and palette bank latches (ROHVCK).
-//  One byte per CPU clock (#unverified: the counter clock was not traced); MAME copies instantly.
-//  Sound: rtl/boards/popeye/popeye_sound.sv (AY channels into the TPP2-CPU output network).
-//
-//  tnx1 = Sky Skipper's TNX1 board (no TNX1 schematic on hand, so every delta below is MAME's):
-//    ROM address = bitswap(A, 15,14,13,12,11,10,8,7,0,1,2,4,5,9,3,6) ^ 0xFC (data swap as TPP2)
-//    RAM 8000-87FF + 8C00-8FFF (8800-8BFF writes ignored); background C000-CFFF, data bit 7 = high nibble
-//    DMA byte 2 bit 0 = background scroll x bit 8; no watchdog; SYSTEM bit 4 not the field (MAME: unknown, 0)
-//    sound: MAME has no TNX1 network (raw AY x 0.4); the TPP2 network is kept (same board family) #unverified
-//
-//============================================================================
 
 module popeye_board
 (
-    input  logic        clk,            // 49.152 MHz
+    input  logic        clk,
     input  logic        reset,
     input  logic        pause,
     input  logic        crt_flip,
-    input  logic        tnx1,           // Sky Skipper TNX1 board
+    input  logic        tnx1,
 
     output chip_pool_pkg::z80pa_i_t z80pa_0_i,
     input  chip_pool_pkg::z80pa_o_t z80pa_0_o,
 
-    input  logic  [7:0] in0,            // P1
-    input  logic  [7:0] in1,            // P2
-    input  logic  [7:0] in2,            // SYSTEM (bit 4 from the board)
+    input  logic  [7:0] in0,
+    input  logic  [7:0] in1,
+    input  logic  [7:0] in2,
     input  logic  [7:0] dsw0,
     input  logic  [7:0] dsw1,
 
-    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
     output logic [14:0] rom_a,
     input  logic  [7:0] rom_d,
     output logic [10:0] gfx1_a,
     input  logic  [7:0] gfx1_d,
     output logic [14:0] gfx2_a,
     input  logic  [7:0] gfx2_d,
-    output logic  [7:0] spal_a,         // proms 0x12000 5B (low nibble) / 0x12200 5A (high nibble)
+    output logic  [7:0] spal_a,
     input  logic  [3:0] spal_lo,
     input  logic  [3:0] spal_hi,
-    output logic  [7:0] prom_a,         // proms 0x12400: 0x00 background 4A, 0x20 text 3A
+    output logic  [7:0] prom_a,
     input  logic  [7:0] prom_d,
 
     output logic        ce_pix,
@@ -76,18 +47,15 @@ module popeye_board
     output logic  [7:0] hs_data_out,
     input  logic        hs_write,
 
-    // pooled AY-3-8910 (dispatcher)
     output chip_pool_pkg::ayr_i_t  ay_0_i,
     input  chip_pool_pkg::ayio_o_t ay_0_o,
 
-    // board RAM pool (dispatcher, ram_pool_pkg)
     output ram_pool_pkg::pram_i_t [8:0] pr_i,
     input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
 
-// ------------------------------------------------------------------ 4 MHz CPU clock: 8 MHz edges from a phase accumulator
 logic [15:0] ph_acc = 16'd0;
 logic        phi = 1'b0;
 logic        cen_p, cen_n;
@@ -100,12 +68,10 @@ always_ff @(posedge clk) begin
     end else ph_acc <= ph_acc + 16'd8000;
 end
 
-// AY clock 2 MHz: every other CPU clock (5F second half)
 logic ay_ph = 1'b0;
 always_ff @(posedge clk) if (cen_p) ay_ph <= ~ay_ph;
 wire ay_cen = cen_p & ay_ph & run;
 
-// ------------------------------------------------------------------ Z80
 wire [15:0] cpu_a = z80pa_0_o.a;
 wire  [7:0] cpu_d = z80pa_0_o.dout;
 wire        mreq  = ~z80pa_0_o.mreq_n;
@@ -118,79 +84,66 @@ wire        busak = ~z80pa_0_o.busak_n;
 
 logic wr_q = 1'b0, iow_q = 1'b0;
 always_ff @(posedge clk) begin wr_q <= wr & mreq; iow_q <= wr & iorq; end
-wire cpu_we = wr & mreq & ~wr_q;        // one clock per write cycle
+wire cpu_we = wr & mreq & ~wr_q;
 wire io_we  = wr & iorq & ~m1 & ~iow_q;
 
 wire sel_rom  = !cpu_a[15];
-wire sel_ram  = tnx1 ? cpu_a[15:12] == 4'h8 && cpu_a[11:10] != 2'b10 // TNX1 8000-87FF, 8C00-8FFF
-                     : cpu_a[15:11] == 5'b10001;                     // 8800-8FFF
-wire sel_txt  = cpu_a[15:11] == 5'b10100;                           // A000-A7FF (A10: colour)
-wire sel_bg   = tnx1 ? cpu_a[15:12] == 4'hC : cpu_a[15:13] == 3'b110; // TNX1 C000-CFFF, TPP2 C000-DFFF
-wire bg_hi_w  = tnx1 ? cpu_d[7] : cpu_a[12];                         // high nibble select
-wire sel_prot = cpu_a[15:1]  == 15'h7000;                           // E000-E001
+wire sel_ram  = tnx1 ? cpu_a[15:12] == 4'h8 && cpu_a[11:10] != 2'b10
+                     : cpu_a[15:11] == 5'b10001;
+wire sel_txt  = cpu_a[15:11] == 5'b10100;
+wire sel_bg   = tnx1 ? cpu_a[15:12] == 4'hC : cpu_a[15:13] == 3'b110;
+wire bg_hi_w  = tnx1 ? cpu_d[7] : cpu_a[12];
+wire sel_prot = cpu_a[15:1]  == 15'h7000;
 
 logic vbl_start, field;
 
-// program ROM scramble
 assign rom_a = tnx1 ? {cpu_a[14:10], cpu_a[8], cpu_a[7], cpu_a[0], cpu_a[1], cpu_a[2], cpu_a[4], cpu_a[5], cpu_a[9], cpu_a[3], cpu_a[6]}
                       ^ 15'h00FC
                     : {cpu_a[14:10], cpu_a[8], cpu_a[7], cpu_a[6], cpu_a[3], cpu_a[9], cpu_a[5], cpu_a[4], cpu_a[2], cpu_a[1], cpu_a[0]}
                       ^ 15'h003F;
 wire [7:0] rom_q = {rom_d[3], rom_d[4], rom_d[2], rom_d[5], rom_d[1], rom_d[6], rom_d[0], rom_d[7]};
 
-// ------------------------------------------------------------------ RAMs
 logic [7:0] ram_q;
 logic [9:0] txt_va;
 logic [7:0] txt_code_q, txt_col_q;
 logic [11:0] bg_va;
 logic [7:0] bg_lo_q, bg_hi_q;
 
-// 8000-8FFF window, 4K (TPP2: 8800-8FFF 7H TMM2016; TNX1: 8000-87FF + 8C00-8FFF); port A: CPU or sprite DMA, port B: hiscore
 logic       dma_req = 1'b0, dma_go = 1'b0;
 logic [9:0] dma_n;
 wire        dma_own = dma_req & busak;
 
-// work RAM: pool block 0 (port B = hiscore)
 assign pr_i[0].a_addr = {3'd0, (dma_own ? 12'hC00 + {2'b00, dma_n} : cpu_a[11:0])}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram & ~dma_own;
 assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
 assign ram_q = pr_o[0].a_q;
 assign hs_data_out = pr_o[0].b_q;
 
-// sprite RAM (2T..1U): four byte lanes, one 32-bit entry per video read
 logic [7:0] spr_a;
 logic [31:0] spr_d;
 wire        dma_wr = dma_go & cen_p & run;
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : sprl
-        // sprite RAM lane ln: pool block 2 + ln (port A = DMA, port B = sprite engine)
         assign pr_i[2 + ln].a_addr = {7'd0, dma_n[9:2]}; assign pr_i[2 + ln].a_d = ram_q; assign pr_i[2 + ln].a_we = dma_wr && dma_n[1:0] == ln;
         assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
         assign spr_d[ln*8 +: 8] = pr_o[2 + ln].b_q;
     end
 endgenerate
 
-// text codes (5P / 5R) and colours (5S, low nibble)
-// pool block 1
 assign pr_i[1].a_addr = {5'd0, cpu_a[9:0]}; assign pr_i[1].a_d = cpu_d; assign pr_i[1].a_we = cpu_we & sel_txt & ~cpu_a[10];
 assign pr_i[1].b_addr = {5'd0, txt_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
 assign txt_code_q = pr_o[1].b_q;
-// pool block 6
 assign pr_i[6].a_addr = {5'd0, cpu_a[9:0]}; assign pr_i[6].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[6].a_we = cpu_we & sel_txt & cpu_a[10];
 assign pr_i[6].b_addr = {5'd0, txt_va}; assign pr_i[6].b_d = 8'h00; assign pr_i[6].b_we = 1'b0;
 assign txt_col_q = pr_o[6].b_q;
 
-// background nibbles (8P / 8S): C000-CFFF low, D000-DFFF high
-// pool block 7
 assign pr_i[7].a_addr = {3'd0, cpu_a[11:0]}; assign pr_i[7].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[7].a_we = cpu_we & sel_bg & ~bg_hi_w;
 assign pr_i[7].b_addr = {3'd0, bg_va}; assign pr_i[7].b_d = 8'h00; assign pr_i[7].b_we = 1'b0;
 assign bg_lo_q = pr_o[7].b_q;
-// pool block 8
 assign pr_i[8].a_addr = {3'd0, cpu_a[11:0]}; assign pr_i[8].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[8].a_we = cpu_we & sel_bg & bg_hi_w;
 assign pr_i[8].b_addr = {3'd0, bg_va}; assign pr_i[8].b_d = 8'h00; assign pr_i[8].b_we = 1'b0;
 assign bg_hi_q = pr_o[8].b_q;
 
-// ------------------------------------------------------------------ protection ALU (7K)
 logic [7:0] prot0, prot1;
 logic [2:0] prot_shift;
 always_ff @(posedge clk) begin
@@ -204,20 +157,18 @@ end
 wire [15:0] prot_pair = {prot1, prot0} << prot_shift;
 wire  [7:0] prot_q    = cpu_a[0] ? 8'h00 : prot_pair[15:8];
 
-// ------------------------------------------------------------------ refresh latch: NMI enable (A8), watchdog enable (A9)
 logic nmi_en = 1'b0, wd_en = 1'b0;
 always_ff @(posedge clk) begin
     if (reset) begin nmi_en <= 1'b0; wd_en <= 1'b0; end
     else if (rfsh && mreq) begin nmi_en <= cpu_a[8]; wd_en <= cpu_a[9]; end
 end
 
-// ------------------------------------------------------------------ vblank: NMI, watchdog, sprite DMA
 logic       nmi_q = 1'b0;
 logic [3:0] wd_cnt = 4'd0;
 logic       wd_reset = 1'b0;
 logic [7:0] scroll_x, scroll_y, scroll_h, pal_bank;
 
-wire [3:0] wd_nx = (nmi_en || !wd_en || tnx1) ? 4'd0 : wd_cnt + 4'd1;     // TNX1: no watchdog (MAME tpp2 only)
+wire [3:0] wd_nx = (nmi_en || !wd_en || tnx1) ? 4'd0 : wd_cnt + 4'd1;
 
 always_ff @(posedge clk) begin
     if (reset) begin
@@ -233,7 +184,6 @@ always_ff @(posedge clk) begin
             end
             dma_req <= 1'b1; dma_n <= 10'd0;
         end
-        // DMA: RAM address follows dma_n once the bus is granted; data is taken on the next CPU clock
         dma_go <= dma_own;
         if (dma_wr) begin
             case (dma_n)
@@ -249,7 +199,6 @@ always_ff @(posedge clk) begin
     end
 end
 
-// ------------------------------------------------------------------ AY-3-8910 (7L)
 wire       cpu_reset = reset | wd_reset;
 wire       ay_wr_a   = iorq && !m1 && wr && cpu_a[1:0] == 2'd0;
 wire       ay_wr_d   = iorq && !m1 && wr && cpu_a[1:0] == 2'd1;
@@ -258,7 +207,6 @@ logic [7:0] ay_dout, ay_portb, ay_a, ay_b, ay_c;
 logic [9:0] ay_sound;
 wire  [2:0] dswbit = ay_portb[3:1];
 
-// AY-3-8910: pooled ay_0 (dispatcher)
 assign ay_0_i.rst_n = ~cpu_reset;
 assign ay_0_i.ce = ay_cen;
 assign ay_0_i.bdir = ay_wr_a | ay_wr_d;
@@ -279,7 +227,6 @@ popeye_sound sound
     .clk(clk), .reset(cpu_reset), .ce(ay_cen), .ch_a(ay_a), .ch_b(ay_b), .ch_c(ay_c), .audio(audio)
 );
 
-// ------------------------------------------------------------------ CPU read data
 logic [7:0] io_q;
 always_comb begin
     case (cpu_a[1:0])
@@ -295,18 +242,17 @@ always_comb begin
     else if (sel_rom)   z80pa_0_i.di = rom_q;
     else if (sel_ram)   z80pa_0_i.di = ram_q;
     else if (sel_prot)  z80pa_0_i.di = prot_q;
-    else                z80pa_0_i.di = 8'h00;     // write-only text / background RAM, empty 8000-87FF / 8800-8BFF
+    else                z80pa_0_i.di = 8'h00;
 end
 
 assign z80pa_0_i.reset_n = ~cpu_reset;
 assign z80pa_0_i.cen_p   = cen_p & run;
 assign z80pa_0_i.cen_n   = cen_n & run;
-assign z80pa_0_i.wait_n  = 1'b1;        // /WAIT pulled up (R77)
+assign z80pa_0_i.wait_n  = 1'b1;
 assign z80pa_0_i.int_n   = 1'b1;
 assign z80pa_0_i.nmi_n   = ~nmi_q;
 assign z80pa_0_i.busrq_n = ~dma_req;
 
-// ------------------------------------------------------------------ video
 popeye_video video
 (
     .clk(clk), .reset(reset),

@@ -1,26 +1,9 @@
-//============================================================================
-//
-//  Nintendo Mario Bros. board (TMA1-CPU / TMA1-VIDEO; reference MAME mario.cpp)
+//  Based on MAME mario.cpp (Mirko Buffoni, Couriersud, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
-//
-//  TMA1-CPU (Mario_Bros_Schematics.pdf p13-16): Z80A 5E at 4 MHz from its own 8 MHz crystal (X1 -> 3D LS74 / 2), Z80A
-//  DMA 5D on the same clock (BUSRQ / BAI), /WAIT = VRAM BUSY through 2B / 4D LS74 (cleared in VBLK), NMI from VBLK
-//  (4D LS74) gated by NMI EI. Same structure as DKC1 (rtl/boards/dkong/dkong3_board.sv).
-//  Memory map:
-//    0000-5FFF ROM 7F / 7E / 7D   6000-6FFF RAM 7A / 7B (6800-6FFF battery-backed)   7000-73FF sprite RAM (2 banks)
-//    7400-77FF video RAM   F000-FFFF ROM 7C (read at ROM 6000, MRA placement)
-//    7C00 R IN0   7C80 R IN1   7F80 R DSW   7D00 W Y scroll (MAME: + 17)   7E00 W sound latch
-//    7E80-7E87 2L LS259 (data bit 0): 0 T ROM (char bank), 1 2PSL (sprite bank), 2 FLIP, 3 CREF 0 (palette bank),
-//                                     4 NMI EI, 5 DMA SET (RDY), 6 / 7 coin counters
-//    7C00 / 7C80 / 7F00-7F07 W sound triggers         I/O port 00: Z80 DMA
-//  Video = dkong_video.sv in Mario mode (TMA1-VIDEO: 24 MHz crystal / 2 = 12M, 6.000 MHz dots, DK raster logic).
-//  Sound: rtl/boards/mario/mario_sound.sv (pooled 8039 + DAC path; walk / skid discrete circuits not yet).
-//
-//============================================================================
 
 module mario_board
 (
-    input  logic        clk,            // 49.152 MHz
+    input  logic        clk,
     input  logic        reset,
     input  logic        pause,
     input  logic        crt_flip,
@@ -34,12 +17,11 @@ module mario_board
     input  logic  [7:0] in1,
     input  logic  [7:0] dsw0,
 
-    // ROMs (shared blocks in rtl/nintendo_dispatcher.sv)
-    output logic [14:0] rom_a,          // F000-FFFF read at ROM 6000 (MRA placement)
+    output logic [14:0] rom_a,
     input  logic  [7:0] rom_d,
-    output logic [11:0] snd_pa,         // soundrom 6K (program)
+    output logic [11:0] snd_pa,
     input  logic  [7:0] snd_pd,
-    output logic [12:0] snd_xa,         // soundrom 6K (MOVX data)
+    output logic [12:0] snd_xa,
     input  logic  [7:0] snd_xd,
     output logic [12:0] gfx1_a,
     input  logic  [7:0] gfx1_d,
@@ -58,7 +40,7 @@ module mario_board
     output logic        video_vblank,
 
     output logic signed [15:0] audio,
-    output logic signed [39:0] mul_a,   // shared multiplier (rtl/nintendo_dispatcher.sv)
+    output logic signed [39:0] mul_a,
     output logic signed [26:0] mul_b,
     input  logic signed [66:0] mul_p,
 
@@ -67,18 +49,15 @@ module mario_board
     output logic  [7:0] hs_data_out,
     input  logic        hs_write,
 
-    // pooled Z80 DMA (dispatcher)
     output chip_pool_pkg::z80dma_i_t z80dma_0_i,
     input  chip_pool_pkg::z80dma_o_t z80dma_0_o,
 
-    // board RAM pool (dispatcher, ram_pool_pkg)
     output ram_pool_pkg::pram_i_t [8:0] pr_i,
     input  ram_pool_pkg::pram_o_t [8:0] pr_o
 );
 
 wire run = ~pause;
 
-// ------------------------------------------------------------------ 4 MHz CPU clock: 8 MHz edges from a phase accumulator
 logic [15:0] ph_acc = 16'd0;
 logic        phi = 1'b0;
 logic        cen_p, cen_n;
@@ -93,7 +72,6 @@ end
 
 logic vram_busy, vblk;
 
-// ------------------------------------------------------------------ Z80
 wire [15:0] cpu_a    = z80pa_0_o.a;
 wire        mreq     = ~z80pa_0_o.mreq_n;
 wire        iorq     = ~z80pa_0_o.iorq_n;
@@ -105,18 +83,16 @@ wire        busak    = ~z80pa_0_o.busak_n;
 
 logic wr_q = 1'b0, rd_q = 1'b0, iow_q = 1'b0, ior_q = 1'b0;
 always_ff @(posedge clk) begin wr_q <= wr & mreq; rd_q <= rd & mreq; iow_q <= wr & iorq; ior_q <= rd & iorq; end
-wire cpu_we = wr & mreq & ~wr_q;        // one clock per write cycle
+wire cpu_we = wr & mreq & ~wr_q;
 wire io_we  = wr & iorq & ~m1 & ~iow_q;
 wire io_re  = rd & iorq & ~m1 & ~ior_q;
 
-// ------------------------------------------------------------------ Z80 DMA (I/O port 00)
 logic [15:0] dma_a;
 logic  [7:0] dma_dout, dma_data, mem_q;
 logic        dma_busrq, dma_busy, dma_mreq, dma_memw;
 logic        dma_rdy;
 wire         dma_cs = iorq && !m1 && cpu_a[7:0] == 8'h00 && !busak;
 
-// Z80 DMA: pooled z80dma_0 (dispatcher)
 assign z80dma_0_i.reset = reset;
 assign z80dma_0_i.cen_p = cen_p & run;
 assign z80dma_0_i.cs = dma_cs;
@@ -134,17 +110,16 @@ assign dma_memw = z80dma_0_o.memw_s;
 assign z80dma_0_i.bus_d = mem_q;
 assign dma_data = z80dma_0_o.data;
 
-// ------------------------------------------------------------------ bus (CPU or DMA)
 wire        dma_own = dma_busy & busak;
 wire [15:0] bus_a   = dma_own ? dma_a : cpu_a;
 wire        bus_we  = dma_own ? dma_memw & dma_mreq : cpu_we;
 wire  [7:0] bus_d   = dma_own ? dma_data : z80pa_0_o.dout;
 
-wire sel_rom  = bus_a < 16'h6000 || bus_a[15:12] == 4'hF;            // 0000-5FFF, F000-FFFF
+wire sel_rom  = bus_a < 16'h6000 || bus_a[15:12] == 4'hF;
 wire sel_ram  = bus_a[15:12] == 4'h6;
-wire sel_obj  = bus_a[15:10] == 6'b011100;                         // 7000-73FF
-wire sel_vram = bus_a[15:10] == 6'b011101;                         // 7400-77FF
-wire sel_io   = bus_a[15:10] == 6'b011111;                         // 7C00-7FFF
+wire sel_obj  = bus_a[15:10] == 6'b011100;
+wire sel_vram = bus_a[15:10] == 6'b011101;
+wire sel_io   = bus_a[15:10] == 6'b011111;
 
 logic [7:0] ram_q, vram_q, obj_q;
 logic [31:0] spr_d;
@@ -156,24 +131,20 @@ assign pr_i[6] = '0;
 assign pr_i[7] = '0;
 assign pr_i[8] = '0;
 
-// work RAM: pool block 0 (port B = hiscore)
 assign pr_i[0].a_addr = {3'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
 assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
 assign ram_q = pr_o[0].a_q;
 assign hs_data_out = pr_o[0].b_q;
 
-// video RAM: pool block 1 (port B = tilemap)
 assign pr_i[1].a_addr = {5'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
 assign pr_i[1].b_addr = {5'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
 assign vram_q = pr_o[1].a_q;
 assign vram_vd = pr_o[1].b_q;
 
-// sprite RAM (two 2148s) as four byte lanes: one 32-bit entry per video read
 logic [7:0] obj_lane_q[4];
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : objl
-        // object RAM lane ln: pool block 2 + ln (port B = sprite engine)
         assign pr_i[2 + ln].a_addr = {7'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
         assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
         assign obj_lane_q[ln] = pr_o[2 + ln].a_q;
@@ -184,30 +155,28 @@ logic [1:0] obj_lane;
 always_ff @(posedge clk) obj_lane <= bus_a[1:0];
 assign obj_q = obj_lane_q[obj_lane];
 
-// ------------------------------------------------------------------ latches
 logic [7:0] lat_7e8, scroll, snd_tune, lat_7f0;
 always_ff @(posedge clk) begin
     if (reset) begin
         lat_7e8 <= 8'd0; scroll <= 8'd0; snd_tune <= 8'd0; lat_7f0 <= 8'd0;
     end else if (cpu_we && !dma_own && sel_io) begin
         case (cpu_a[9:7])
-            3'd2: scroll <= z80pa_0_o.dout + 8'd17;                // scroll = data + 17
-            3'd4: snd_tune <= z80pa_0_o.dout;                      // 7E00 7J LS374
+            3'd2: scroll <= z80pa_0_o.dout + 8'd17;
+            3'd4: snd_tune <= z80pa_0_o.dout;
             3'd5: lat_7e8[cpu_a[2:0]] <= z80pa_0_o.dout[0];
-            3'd6: lat_7f0[cpu_a[2:0]] <= z80pa_0_o.dout[0];        // 7F00-7F07 7M LS259
-            default: ;                                             // 7C00 / 7C80 writes = walk triggers (mario_sound)
+            3'd6: lat_7f0[cpu_a[2:0]] <= z80pa_0_o.dout[0];
+            default: ;
         endcase
     end
 end
 
-wire       gfx_bank  = lat_7e8[0];      // T ROM
-wire       spr_bank  = lat_7e8[1];      // 2 PSL
+wire       gfx_bank  = lat_7e8[0];
+wire       spr_bank  = lat_7e8[1];
 wire       flip      = lat_7e8[2];
-wire       pal_bank  = lat_7e8[3];      // CREF 0
+wire       pal_bank  = lat_7e8[3];
 wire       nmi_mask  = lat_7e8[4];
 assign     dma_rdy   = lat_7e8[5];
 
-// NMI: VBLK edge sets it while the mask is on
 logic nmi_q = 1'b0, vblk_q = 1'b0;
 always_ff @(posedge clk) begin
     vblk_q <= vblk;
@@ -215,23 +184,21 @@ always_ff @(posedge clk) begin
     else if (vblk && !vblk_q) nmi_q <= 1'b1;
 end
 
-// /WAIT: VRAM access while the video board is fetching (LS74 2B / 4D clocked by the CPU clock, cleared in VBLK)
 logic wait_q = 1'b0;
 always_ff @(posedge clk) begin
     if (reset) wait_q <= 1'b0;
     else if (cen_n && run) wait_q <= (mreq | rd | wr) && !rfsh && !busak && cpu_a[15:10] == 6'b011101 && vram_busy && !vblk;
 `ifdef SIM_NO_VRAM_WAIT
-    wait_q <= 1'b0;                     // sim only: MAME has no VRAM wait states (compare runs)
+    wait_q <= 1'b0;
 `endif
 end
 
-// ------------------------------------------------------------------ CPU read data
 logic [7:0] io_q;
 always_comb begin
     case (cpu_a[9:7])
-        3'd0:    io_q = in0;            // 7C00
-        3'd1:    io_q = in1;            // 7C80
-        3'd7:    io_q = dsw0;           // 7F80
+        3'd0:    io_q = in0;
+        3'd1:    io_q = in1;
+        3'd7:    io_q = dsw0;
         default: io_q = 8'h00;
     endcase
 end
@@ -257,7 +224,6 @@ assign z80pa_0_i.int_n   = 1'b1;
 assign z80pa_0_i.nmi_n   = ~nmi_q;
 assign z80pa_0_i.busrq_n = ~dma_busrq;
 
-// ------------------------------------------------------------------ video
 logic  [7:0] cc_a_nc;
 dkong_video video
 (
