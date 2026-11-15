@@ -1,5 +1,6 @@
 //  Copyright (C) 2026 Rodimus
-//  Pictures from MAME dkong_v.cpp: 32x32 tilemap of 8x8 2bpp chars, colour code PROM per 4 rows x 1 column;
+//  Based on MAME dkong_v.cpp (Couriersud, BSD-3-Clause)
+//  Pictures: 32x32 tilemap of 8x8 2bpp chars, colour code PROM per 4 rows x 1 column;
 
 module dkong_video
 (

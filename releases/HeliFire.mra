@@ -25,7 +25,7 @@
     <joystick>8-way</joystick>
     <special_controls></special_controls>
     <num_buttons>1</num_buttons>
-    <buttons names="Fire,Not Used,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+    <buttons names="Fire,-,-,-,Coin,Start 1P,Start 2P,Pause,-,-,-" default="A,Select,Start,R,L"/>
 
     <switches default="E0">
         <dip name="Lives" bits="0,1" ids="3,4,5,6"/>
@@ -34,7 +34,7 @@
         <dip name="Cabinet" bits="7" ids="Upright,Cocktail" values="1,0"/>
     </switches>
 
-    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <!-- Index 0: ROM -->
     <rom index="0" md5="none" zip="helifire.zip">
         <part crc="032f89ca" name="tub_f1_b"/>
         <part crc="2774e70f" name="tub_f2_b"/>
@@ -50,7 +50,7 @@
         <part crc="9d77a31f" name="tub-e_ic5-a"/>
     </rom>
 
-    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <!-- Index 1: Config -->
     <rom index="1">
         <part>
             0A 10 00 00 00 00 00 E0 FF FF 80 80 80 00 80 80

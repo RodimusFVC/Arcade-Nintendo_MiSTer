@@ -25,7 +25,7 @@
     <joystick>2-way</joystick>
     <special_controls></special_controls>
     <num_buttons>3</num_buttons>
-    <buttons names="Fire,Button 2,Button 3,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+    <buttons names="Fire,Button 2,Button 3,-,Coin,Start 1P,Start 2P,Pause,-,-,-" default="A,B,X,Select,Start,R,L"/>
 
     <switches default="01">
         <dip name="Demo Sounds" bits="0" ids="Off,On"/>
@@ -35,7 +35,7 @@
         <dip name="Cabinet" bits="7" ids="Upright,Cocktail"/>
     </switches>
 
-    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <!-- Index 0: ROM -->
     <rom index="0" md5="none" zip="strtheat.zip">
         <part crc="8d3e82c3" name="2764.u2"/>
         <part crc="f0759e76" name="2764.u3"/>
@@ -60,7 +60,7 @@
         <part crc="a515d59b" name="82s129.2n"/>
     </rom>
 
-    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <!-- Index 1: Config -->
     <rom index="1">
         <part>
             00 10 03 0B 00 00 00 01 FF FF 80 80 80 00 80 80

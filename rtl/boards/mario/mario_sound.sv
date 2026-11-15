@@ -1,4 +1,4 @@
-//  Based on MAME mario.cpp (Mirko Buffoni, Couriersud, BSD-3-Clause); nl_mario.cpp (Couriersud, BSD-3-Clause)
+// Based on MAME mario.cpp, nl_mario.cpp (Mirko Buffoni, Couriersud, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
 
 module mario_sound

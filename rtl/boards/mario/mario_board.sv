@@ -131,13 +131,13 @@ assign pr_i[6] = '0;
 assign pr_i[7] = '0;
 assign pr_i[8] = '0;
 
-assign pr_i[0].a_addr = {3'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
-assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign pr_i[0].a_addr = {4'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
+assign pr_i[0].b_addr = {4'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
 assign ram_q = pr_o[0].a_q;
 assign hs_data_out = pr_o[0].b_q;
 
-assign pr_i[1].a_addr = {5'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
-assign pr_i[1].b_addr = {5'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
+assign pr_i[1].a_addr = {6'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
+assign pr_i[1].b_addr = {6'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
 assign vram_q = pr_o[1].a_q;
 assign vram_vd = pr_o[1].b_q;
 
@@ -145,8 +145,8 @@ logic [7:0] obj_lane_q[4];
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : objl
-        assign pr_i[2 + ln].a_addr = {7'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
-        assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
+        assign pr_i[2 + ln].a_addr = {8'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
+        assign pr_i[2 + ln].b_addr = {8'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
         assign obj_lane_q[ln] = pr_o[2 + ln].a_q;
         assign spr_d[ln*8 +: 8] = pr_o[2 + ln].b_q;
     end

@@ -1,4 +1,4 @@
-//  Based on MAME dkong.cpp (Couriersud, BSD-3-Clause); popeye.cpp (smf, Nicola Salmoria, Couriersud, BSD-3-Clause); mario.cpp (Mirko Buffoni, Couriersud, BSD-3-Clause); spacefb.cpp (Chris Hardy, BSD-3-Clause); n8080.cpp (Pierpaolo Prazzoli, BSD-3-Clause)
+// Based on MAME dkong.cpp, popeye.cpp, mario.cpp, spacefb.cpp, n8080.cpp (Couriersud, smf, Nicola Salmoria, Mirko Buffoni, Chris Hardy, Pierpaolo Prazzoli, BSD-3-Clause)
 //  Copyright (C) 2026 Rodimus
 
 module nintendo_dispatcher
@@ -247,7 +247,7 @@ wire  [7:0] z80pa_0_do;
 wire [211:0] z80pa_0_reg;
 wire        z80pa_0_m1_n, z80pa_0_mreq_n, z80pa_0_iorq_n, z80pa_0_rd_n, z80pa_0_wr_n, z80pa_0_rfsh_n, z80pa_0_busak_n;
 
-T80pa #(.Mode(0)) z80pa_0
+t80sv_T80pa #(.Mode(0)) z80pa_0
 (
     .RESET_n (z80pa_0_i.reset_n), .CLK(clk), .CEN_p(z80pa_0_i.cen_p), .CEN_n(z80pa_0_i.cen_n),
     .WAIT_n  (z80pa_0_i.wait_n), .INT_n(z80pa_0_i.int_n), .NMI_n(z80pa_0_i.nmi_n), .BUSRQ_n(z80pa_0_i.busrq_n),
@@ -262,7 +262,7 @@ assign z80pa_0_o.rd_n = z80pa_0_rd_n;     assign z80pa_0_o.wr_n = z80pa_0_wr_n; 
 assign z80pa_0_o.busak_n = z80pa_0_busak_n;
 assign z80pa_0_o.inte = z80pa_0_reg[210];
 
-// mcs48_0: Donkey Kong / Mario Bros. / Space Firebird sound CPU (8035 / 8039; T48 t8039_notri_extrom, Arnim Laeuger)
+// mcs48_0: Donkey Kong / Mario Bros. / Space Firebird sound CPU (8035 / 8039; t48sv, rtl/rodimus/t48sv)
 chip_pool_pkg::mcs48_i_t dk_mcs48_0_i, mar_mcs48_0_i, sfb_mcs48_0_i, n80_mcs48_0_i, mcs48_0_i;
 chip_pool_pkg::mcs48_o_t mcs48_0_o;
 assign mcs48_0_i = is_mar ? mar_mcs48_0_i : is_sfb ? sfb_mcs48_0_i : is_n80 ? n80_mcs48_0_i : dk_mcs48_0_i;
@@ -271,7 +271,7 @@ wire  [7:0] mcu_p1, mcu_p2, mcu_db;
 wire [11:0] mcu_pa;
 wire        mcu_rd_n, mcu_wr_n, mcu_ale;
 
-t8039_notri_extrom #(
+t48sv_t8039_notri_extrom #(
     .gate_port_input_g (0),
     .ram_addr_width_g  (7)
 ) mcs48_0 (
@@ -288,27 +288,44 @@ assign mcs48_0_o.p1 = mcu_p1;  assign mcs48_0_o.p2 = mcu_p2;  assign mcs48_0_o.p
 assign mcs48_0_o.rd_n = mcu_rd_n;  assign mcs48_0_o.wr_n = mcu_wr_n;  assign mcs48_0_o.ale = mcu_ale;  assign mcs48_0_o.db = mcu_db;
 assign mcs48_0_o.db_dir = 1'b0;
 
-// t65_0 / t65_1: RP2A03 6502 cores, stock T65 (DK3 sound #1 / #2; the APUs are on the board, rtl/sound/rp2a03.sv)
+// t65_0 / t65_1: RP2A03 6502 cores, t65sv (DK3 sound #1 / #2)
 chip_pool_pkg::t65_i_t t65_0_i, t65_1_i;
 chip_pool_pkg::t65_o_t t65_0_o, t65_1_o;
 
 wire [23:0] t65_0_a24, t65_1_a24;
-T65 t65_0
+t65sv_T65 t65_0
 (
     .Mode(2'b00), .Res_n(t65_0_i.res_n), .Enable(t65_0_i.enable), .Clk(clk), .Rdy(t65_0_i.rdy), .Abort_n(1'b1),
-    .IRQ_n(t65_0_i.irq_n), .NMI_n(t65_0_i.nmi_n), .SO_n(1'b1), .R_W_n(t65_0_o.rw), .Sync(), .EF(), .MF(), .XF(),
+    .IRQ_n(t65_0_i.irq_n), .NMI_n(t65_0_i.nmi_n), .SO_n(1'b1), .R_W_n(t65_0_o.rw), .Sync(t65_0_o.sync), .EF(), .MF(), .XF(),
     .ML_n(), .VP_n(), .VDA(), .VPA(), .A(t65_0_a24), .DI(t65_0_i.di), .DO(t65_0_o.dout), .Regs(), .NMI_ack()
 );
-T65 t65_1
+t65sv_T65 t65_1
 (
     .Mode(2'b00), .Res_n(t65_1_i.res_n), .Enable(t65_1_i.enable), .Clk(clk), .Rdy(t65_1_i.rdy), .Abort_n(1'b1),
-    .IRQ_n(t65_1_i.irq_n), .NMI_n(t65_1_i.nmi_n), .SO_n(1'b1), .R_W_n(t65_1_o.rw), .Sync(), .EF(), .MF(), .XF(),
+    .IRQ_n(t65_1_i.irq_n), .NMI_n(t65_1_i.nmi_n), .SO_n(1'b1), .R_W_n(t65_1_o.rw), .Sync(t65_1_o.sync), .EF(), .MF(), .XF(),
     .ML_n(), .VP_n(), .VDA(), .VPA(), .A(t65_1_a24), .DI(t65_1_i.di), .DO(t65_1_o.dout), .Regs(), .NMI_ack()
 );
 assign t65_0_o.a = t65_0_a24[15:0];
 assign t65_1_o.a = t65_1_a24[15:0];
 
-// i8257_0: Donkey Kong / DK Jr. / Radar Scope sprite DMA (8257, rtl/cpu/i8257.sv)
+chip_pool_pkg::rp2a03_i_t rp2a03_0_i, rp2a03_1_i;
+chip_pool_pkg::rp2a03_o_t rp2a03_0_o, rp2a03_1_o;
+rp2a03 rp2a03_0
+(
+    .clk(clk), .reset(reset | ~is_dk3 | rp2a03_0_i.reset), .ce(rp2a03_0_i.ce), .nmi_n(rp2a03_0_i.nmi_n),
+    .t65_i(t65_0_i), .t65_o(t65_0_o),
+    .ext_a(rp2a03_0_o.ext_a), .ext_rw(rp2a03_0_o.ext_rw), .ext_dout(rp2a03_0_o.ext_dout), .ext_din(rp2a03_0_i.ext_din),
+    .aux_a(rp2a03_0_o.aux_a), .aux_b(rp2a03_0_o.aux_b)
+);
+rp2a03 rp2a03_1
+(
+    .clk(clk), .reset(reset | ~is_dk3 | rp2a03_1_i.reset), .ce(rp2a03_1_i.ce), .nmi_n(rp2a03_1_i.nmi_n),
+    .t65_i(t65_1_i), .t65_o(t65_1_o),
+    .ext_a(rp2a03_1_o.ext_a), .ext_rw(rp2a03_1_o.ext_rw), .ext_dout(rp2a03_1_o.ext_dout), .ext_din(rp2a03_1_i.ext_din),
+    .aux_a(rp2a03_1_o.aux_a), .aux_b(rp2a03_1_o.aux_b)
+);
+
+// i8257_0: Donkey Kong / DK Jr. / Radar Scope sprite DMA (8257, rtl/rodimus/i8257/i8257.sv)
 chip_pool_pkg::i8257_i_t i8257_0_i;
 chip_pool_pkg::i8257_o_t i8257_0_o;
 i8257 i8257_0
@@ -320,7 +337,7 @@ i8257 i8257_0
     .memw(i8257_0_o.memw), .data(i8257_0_o.data)
 );
 
-// z80dma_0: Donkey Kong 3 / Mario Bros. sprite DMA (Z80 DMA, rtl/cpu/z80dma.sv)
+// z80dma_0: Donkey Kong 3 / Mario Bros. sprite DMA (Z80 DMA, rtl/rodimus/z80dma/z80dma.sv)
 chip_pool_pkg::z80dma_i_t dk3_z80dma_0_i, mar_z80dma_0_i, z80dma_0_i;
 chip_pool_pkg::z80dma_o_t z80dma_0_o;
 assign z80dma_0_i = is_dk3 ? dk3_z80dma_0_i : mar_z80dma_0_i;
@@ -342,7 +359,7 @@ jt49_bus ay_0
     .IOA_out(ay_0_o.ioa_out), .IOB_out(ay_0_o.iob_out), .sound(ay_0_o.sound), .sel(1'b1), .sample()
 );
 
-// sn76477_0: Space Fever / Sheriff SN76477 (rtl/sound/sn76477.sv); output stage centre-to-peak = 150K / 47K
+// sn76477_0: Space Fever / Sheriff SN76477 (rtl/rodimus/sn76477/sn76477.sv); output stage centre-to-peak = 150K / 47K
 chip_pool_pkg::sn76477_i_t sn76477_0_i;
 chip_pool_pkg::sn76477_o_t sn76477_0_o;
 sn76477 #(.C2P(32'd20574012)) sn76477_0
@@ -399,7 +416,7 @@ dkong3_board dkong3
     .clk(clk), .reset(reset | ~is_dk3), .pause(pause), .crt_flip(crt_flip),
     .rom_dec(rom_dec), .eep_cs(dk3_eep_cs), .eep_clk(dk3_eep_clk), .eep_di(dk3_eep_di), .eep_do(eep_do),
     .z80pa_0_i(dk3_z80pa_0_i), .z80pa_0_o(z80pa_0_o),
-    .t65_0_i(t65_0_i), .t65_0_o(t65_0_o), .t65_1_i(t65_1_i), .t65_1_o(t65_1_o),
+    .rp2a03_0_i(rp2a03_0_i), .rp2a03_0_o(rp2a03_0_o), .rp2a03_1_i(rp2a03_1_i), .rp2a03_1_o(rp2a03_1_o),
     .in0(in0), .in1(in1), .dsw0(dsw0), .dsw1(dsw1),
     .rom_a(dk3_rom_a), .rom_d(rom_d), .snd1_a(dk3_snd1_a), .snd1_d(snd_xd), .snd2_a(dk3_snd2_a), .snd2_d(snd2_d),
     .gfx1_a(dk3_gfx1_a), .gfx1_d(gfx1_d), .gfx2_a(dk3_gfx2_a), .gfx2_d(gfx2_d),

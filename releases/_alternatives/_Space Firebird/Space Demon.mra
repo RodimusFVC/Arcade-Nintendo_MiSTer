@@ -25,7 +25,7 @@
     <joystick>2-way</joystick>
     <special_controls></special_controls>
     <num_buttons>2</num_buttons>
-    <buttons names="Fire,Button 2,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+    <buttons names="Fire,Button 2,-,-,Coin,Start 1P,Start 2P,Pause,-,-,-" default="A,B,Select,Start,R,L"/>
 
     <switches default="20">
         <dip name="Bonus Life" bits="4" ids="5000,8000"/>
@@ -35,7 +35,7 @@
         <dip name="Coinage" bits="2,3" ids="2C/1C,1C/1C,1C/2C,1C/3C" values="1,0,3,2"/>
     </switches>
 
-    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <!-- Index 0: ROM -->
     <rom index="0" md5="none" zip="spacedem.zip|spacefb.zip">
         <part crc="be4b9cbb" name="sdm-c-5e"/>
         <part crc="0814f964" name="sdm-c-5f"/>
@@ -56,7 +56,7 @@
         <part crc="6d8ad169" name="sdm-v-3n"/>
     </rom>
 
-    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <!-- Index 1: Config -->
     <rom index="1">
         <part>
             05 10 00 00 00 00 00 20 FF FF 80 80 80 00 80 80

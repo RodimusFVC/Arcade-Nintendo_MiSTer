@@ -113,8 +113,8 @@ logic       dma_req = 1'b0, dma_go = 1'b0;
 logic [9:0] dma_n;
 wire        dma_own = dma_req & busak;
 
-assign pr_i[0].a_addr = {3'd0, (dma_own ? 12'hC00 + {2'b00, dma_n} : cpu_a[11:0])}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram & ~dma_own;
-assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign pr_i[0].a_addr = {4'd0, (dma_own ? 12'hC00 + {2'b00, dma_n} : cpu_a[11:0])}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram & ~dma_own;
+assign pr_i[0].b_addr = {4'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
 assign ram_q = pr_o[0].a_q;
 assign hs_data_out = pr_o[0].b_q;
 
@@ -124,24 +124,24 @@ wire        dma_wr = dma_go & cen_p & run;
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : sprl
-        assign pr_i[2 + ln].a_addr = {7'd0, dma_n[9:2]}; assign pr_i[2 + ln].a_d = ram_q; assign pr_i[2 + ln].a_we = dma_wr && dma_n[1:0] == ln;
-        assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
+        assign pr_i[2 + ln].a_addr = {8'd0, dma_n[9:2]}; assign pr_i[2 + ln].a_d = ram_q; assign pr_i[2 + ln].a_we = dma_wr && dma_n[1:0] == ln;
+        assign pr_i[2 + ln].b_addr = {8'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
         assign spr_d[ln*8 +: 8] = pr_o[2 + ln].b_q;
     end
 endgenerate
 
-assign pr_i[1].a_addr = {5'd0, cpu_a[9:0]}; assign pr_i[1].a_d = cpu_d; assign pr_i[1].a_we = cpu_we & sel_txt & ~cpu_a[10];
-assign pr_i[1].b_addr = {5'd0, txt_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
+assign pr_i[1].a_addr = {6'd0, cpu_a[9:0]}; assign pr_i[1].a_d = cpu_d; assign pr_i[1].a_we = cpu_we & sel_txt & ~cpu_a[10];
+assign pr_i[1].b_addr = {6'd0, txt_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
 assign txt_code_q = pr_o[1].b_q;
-assign pr_i[6].a_addr = {5'd0, cpu_a[9:0]}; assign pr_i[6].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[6].a_we = cpu_we & sel_txt & cpu_a[10];
-assign pr_i[6].b_addr = {5'd0, txt_va}; assign pr_i[6].b_d = 8'h00; assign pr_i[6].b_we = 1'b0;
+assign pr_i[6].a_addr = {6'd0, cpu_a[9:0]}; assign pr_i[6].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[6].a_we = cpu_we & sel_txt & cpu_a[10];
+assign pr_i[6].b_addr = {6'd0, txt_va}; assign pr_i[6].b_d = 8'h00; assign pr_i[6].b_we = 1'b0;
 assign txt_col_q = pr_o[6].b_q;
 
-assign pr_i[7].a_addr = {3'd0, cpu_a[11:0]}; assign pr_i[7].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[7].a_we = cpu_we & sel_bg & ~bg_hi_w;
-assign pr_i[7].b_addr = {3'd0, bg_va}; assign pr_i[7].b_d = 8'h00; assign pr_i[7].b_we = 1'b0;
+assign pr_i[7].a_addr = {4'd0, cpu_a[11:0]}; assign pr_i[7].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[7].a_we = cpu_we & sel_bg & ~bg_hi_w;
+assign pr_i[7].b_addr = {4'd0, bg_va}; assign pr_i[7].b_d = 8'h00; assign pr_i[7].b_we = 1'b0;
 assign bg_lo_q = pr_o[7].b_q;
-assign pr_i[8].a_addr = {3'd0, cpu_a[11:0]}; assign pr_i[8].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[8].a_we = cpu_we & sel_bg & bg_hi_w;
-assign pr_i[8].b_addr = {3'd0, bg_va}; assign pr_i[8].b_d = 8'h00; assign pr_i[8].b_we = 1'b0;
+assign pr_i[8].a_addr = {4'd0, cpu_a[11:0]}; assign pr_i[8].a_d = {4'h0, cpu_d[3:0]}; assign pr_i[8].a_we = cpu_we & sel_bg & bg_hi_w;
+assign pr_i[8].b_addr = {4'd0, bg_va}; assign pr_i[8].b_d = 8'h00; assign pr_i[8].b_we = 1'b0;
 assign bg_hi_q = pr_o[8].b_q;
 
 logic [7:0] prot0, prot1;

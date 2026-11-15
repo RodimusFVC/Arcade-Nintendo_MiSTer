@@ -6,10 +6,10 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_kits_pkg.s
 set_global_assignment -name SYSTEMVERILOG_FILE Arcade-Nintendo.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/nintendo_dispatcher.sv
 
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/cpu/i8257.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/cpu/z80dma.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/rp2a03_apu.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/rp2a03.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/rodimus/i8257/i8257.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/rodimus/z80dma/z80dma.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/rodimus/rp2a03/rp2a03_apu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/rodimus/rp2a03/rp2a03.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_board.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_video.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/dkong/dkong_radar.sv
@@ -26,13 +26,13 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_video.
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/spacefb/spacefb_sound.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/n8080/n8080_board.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/boards/n8080/n8080_sound.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/sn76477.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/rodimus/sn76477/sn76477.sv
 # jotego jteeprom (GPL-3, Jose Tejada Gomez): 93C46 for the Braze kits
 set_global_assignment -name VERILOG_FILE rtl/jteeprom/hdl/jt9346.v
 
-set_global_assignment -name QIP_FILE rtl/cpu/T80/T80.qip
-set_global_assignment -name QIP_FILE rtl/cpu/i8039/i8039.qip
-set_global_assignment -name QIP_FILE rtl/cpu/T65/t65.qip
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/rodimus/t80sv/t80sv_all.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/rodimus/t48sv/t48sv_all.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/rodimus/t65sv/t65sv_all.sv
 set_global_assignment -name QIP_FILE rtl/sound/jt49/hdl/jt49.qip
 
 set_global_assignment -name VERILOG_FILE rtl/mister_custom/pause.v

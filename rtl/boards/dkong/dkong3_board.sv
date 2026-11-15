@@ -16,10 +16,10 @@ module dkong3_board
 
     output chip_pool_pkg::z80pa_i_t z80pa_0_i,
     input  chip_pool_pkg::z80pa_o_t z80pa_0_o,
-    output chip_pool_pkg::t65_i_t   t65_0_i,
-    input  chip_pool_pkg::t65_o_t   t65_0_o,
-    output chip_pool_pkg::t65_i_t   t65_1_i,
-    input  chip_pool_pkg::t65_o_t   t65_1_o,
+    output chip_pool_pkg::rp2a03_i_t rp2a03_0_i,
+    input  chip_pool_pkg::rp2a03_o_t rp2a03_0_o,
+    output chip_pool_pkg::rp2a03_i_t rp2a03_1_i,
+    input  chip_pool_pkg::rp2a03_o_t rp2a03_1_o,
 
     input  logic  [7:0] in0,
     input  logic  [7:0] in1,
@@ -139,13 +139,13 @@ logic  [7:0] vram_vd;
 
 assign pr_i[8] = '0;
 
-assign pr_i[0].a_addr = {3'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
-assign pr_i[0].b_addr = {3'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign pr_i[0].a_addr = {4'd0, bus_a[11:0]}; assign pr_i[0].a_d = bus_d; assign pr_i[0].a_we = bus_we & sel_ram;
+assign pr_i[0].b_addr = {4'd0, hs_address[11:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
 assign ram_q = pr_o[0].a_q;
 assign hs_data_out = pr_o[0].b_q;
 
-assign pr_i[1].a_addr = {5'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
-assign pr_i[1].b_addr = {5'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
+assign pr_i[1].a_addr = {6'd0, bus_a[9:0]}; assign pr_i[1].a_d = bus_d; assign pr_i[1].a_we = bus_we & sel_vram;
+assign pr_i[1].b_addr = {6'd0, vram_va}; assign pr_i[1].b_d = 8'h00; assign pr_i[1].b_we = 1'b0;
 assign vram_q = pr_o[1].a_q;
 assign vram_vd = pr_o[1].b_q;
 
@@ -153,8 +153,8 @@ logic [7:0] obj_lane_q[4];
 genvar ln;
 generate
     for (ln = 0; ln < 4; ln++) begin : objl
-        assign pr_i[2 + ln].a_addr = {7'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
-        assign pr_i[2 + ln].b_addr = {7'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
+        assign pr_i[2 + ln].a_addr = {8'd0, bus_a[9:2]}; assign pr_i[2 + ln].a_d = bus_d; assign pr_i[2 + ln].a_we = bus_we & sel_obj & (bus_a[1:0] == ln);
+        assign pr_i[2 + ln].b_addr = {8'd0, spr_a}; assign pr_i[2 + ln].b_d = 8'h00; assign pr_i[2 + ln].b_we = 1'b0;
         assign obj_lane_q[ln] = pr_o[2 + ln].a_q;
         assign spr_d[ln*8 +: 8] = pr_o[2 + ln].b_q;
     end
@@ -275,24 +275,30 @@ logic        s_rw[2];
 logic  [7:0] s_do[2], s_di[2], s_ram_q[2];
 logic [15:0] s_aux_a[2], s_aux_b[2];
 
-rp2a03 apu0
-(
-    .clk(clk), .reset(snd_reset), .ce(apu_ce), .nmi_n(~vblk),
-    .t65_i(t65_0_i), .t65_o(t65_0_o),
-    .ext_a(s_a[0]), .ext_rw(s_rw[0]), .ext_dout(s_do[0]), .ext_din(s_di[0]), .aux_a(s_aux_a[0]), .aux_b(s_aux_b[0])
-);
-rp2a03 apu1
-(
-    .clk(clk), .reset(snd_reset), .ce(apu_ce), .nmi_n(~vblk),
-    .t65_i(t65_1_i), .t65_o(t65_1_o),
-    .ext_a(s_a[1]), .ext_rw(s_rw[1]), .ext_dout(s_do[1]), .ext_din(s_di[1]), .aux_a(s_aux_a[1]), .aux_b(s_aux_b[1])
-);
+assign rp2a03_0_i.reset   = snd_reset;
+assign rp2a03_0_i.ce      = apu_ce;
+assign rp2a03_0_i.nmi_n   = ~vblk;
+assign rp2a03_0_i.ext_din = s_di[0];
+assign s_a[0]     = rp2a03_0_o.ext_a;
+assign s_rw[0]    = rp2a03_0_o.ext_rw;
+assign s_do[0]    = rp2a03_0_o.ext_dout;
+assign s_aux_a[0] = rp2a03_0_o.aux_a;
+assign s_aux_b[0] = rp2a03_0_o.aux_b;
+assign rp2a03_1_i.reset   = snd_reset;
+assign rp2a03_1_i.ce      = apu_ce;
+assign rp2a03_1_i.nmi_n   = ~vblk;
+assign rp2a03_1_i.ext_din = s_di[1];
+assign s_a[1]     = rp2a03_1_o.ext_a;
+assign s_rw[1]    = rp2a03_1_o.ext_rw;
+assign s_do[1]    = rp2a03_1_o.ext_dout;
+assign s_aux_a[1] = rp2a03_1_o.aux_a;
+assign s_aux_b[1] = rp2a03_1_o.aux_b;
 
 genvar sc;
 generate
     for (sc = 0; sc < 2; sc++) begin : sram
-        assign pr_i[6 + sc].a_addr = {4'd0, s_a[sc][10:0]}; assign pr_i[6 + sc].a_d = s_do[sc]; assign pr_i[6 + sc].a_we = apu_ce && !s_rw[sc] && !s_a[sc][15];
-        assign pr_i[6 + sc].b_addr = 15'd0; assign pr_i[6 + sc].b_d = 8'h00; assign pr_i[6 + sc].b_we = 1'b0;
+        assign pr_i[6 + sc].a_addr = {5'd0, s_a[sc][10:0]}; assign pr_i[6 + sc].a_d = s_do[sc]; assign pr_i[6 + sc].a_we = apu_ce && !s_rw[sc] && !s_a[sc][15];
+        assign pr_i[6 + sc].b_addr = 16'd0; assign pr_i[6 + sc].b_d = 8'h00; assign pr_i[6 + sc].b_we = 1'b0;
         assign s_ram_q[sc] = pr_o[6 + sc].a_q;
     end
 endgenerate

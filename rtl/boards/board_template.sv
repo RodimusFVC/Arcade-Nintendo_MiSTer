@@ -4,7 +4,7 @@
 //
 //  Boards never instantiate a CPU, sound chip, DMA controller, ROM store or board RAM. They live ONCE in the dispatcher
 //  rtl/nintendo_dispatcher.sv: the Z80 z80pa_0 (T80pa, z80pa_* buses; runtime 8080 mode), the 8035 / 8039 mcs48_0
-//  (mcs48_*), the 6502 cores t65_0 / t65_1 (t65_*; the RP2A03 glue + APU, rtl/sound/rp2a03.sv, sits on the board as on
+//  (mcs48_*), the 6502 cores t65_0 / t65_1 (t65_*; the RP2A03 glue + APU, rtl/rodimus/rp2a03/rp2a03.sv, sits on the board as on
 //  PunchOut), the DMA controllers i8257_0 / z80dma_0, the AY ay_0 (ayr_i_t / ayio_o_t), the SN76477 sn76477_0, the shared
 //  sound multiplier (mul_a / mul_b / mul_p), the ROM blocks (CPU, sound, sound 2, gfx1, gfx2, palette / colour PROMs;
 //  loaded by ioctl index and address) and the board RAM pool pr 0-8 (16K, 1K, 4 x 256, 2K, 4K, 4K).

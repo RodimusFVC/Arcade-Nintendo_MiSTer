@@ -90,8 +90,8 @@ assign pr_i[1] = '0;
 assign pr_i[6] = '0;
 assign pr_i[7] = '0;
 assign pr_i[8] = '0;
-assign pr_i[0].a_addr = {4'd0, cpu_a[10:0]}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram;
-assign pr_i[0].b_addr = {4'd0, hs_address[10:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
+assign pr_i[0].a_addr = {5'd0, cpu_a[10:0]}; assign pr_i[0].a_d = cpu_d; assign pr_i[0].a_we = cpu_we & sel_ram;
+assign pr_i[0].b_addr = {5'd0, hs_address[10:0]}; assign pr_i[0].b_d = hs_data_in; assign pr_i[0].b_we = hs_write & pause;
 assign ram_q = pr_o[0].a_q;
 assign hs_data_out = pr_o[0].b_q;
 
@@ -101,8 +101,8 @@ logic [7:0] obj_vq [4];
 genvar pg;
 generate
     for (pg = 0; pg < 4; pg++) begin : objp
-        assign pr_i[2 + pg].a_addr = {7'd0, cpu_a[7:0]}; assign pr_i[2 + pg].a_d = cpu_d; assign pr_i[2 + pg].a_we = cpu_we && sel_obj && cpu_a[9:8] == pg;
-        assign pr_i[2 + pg].b_addr = {7'd0, obj_va}; assign pr_i[2 + pg].b_d = 8'h00; assign pr_i[2 + pg].b_we = 1'b0;
+        assign pr_i[2 + pg].a_addr = {8'd0, cpu_a[7:0]}; assign pr_i[2 + pg].a_d = cpu_d; assign pr_i[2 + pg].a_we = cpu_we && sel_obj && cpu_a[9:8] == pg;
+        assign pr_i[2 + pg].b_addr = {8'd0, obj_va}; assign pr_i[2 + pg].b_d = 8'h00; assign pr_i[2 + pg].b_we = 1'b0;
         assign obj_cq[pg] = pr_o[2 + pg].a_q;
         assign obj_vq[pg] = pr_o[2 + pg].b_q;
     end

@@ -1,5 +1,6 @@
 //  Copyright (C) 2026 Rodimus
-//    corner are measured from MAME's spacefb samples (recordings of the board); levels = MAME (samples 1.0, DAC 0.25).
+//  Based on MAME spacefb.cpp (Chris Hardy, BSD-3-Clause)
+//    corner are measured from recordings of the board; levels: samples 1.0, DAC 0.25.
 
 module spacefb_sound
 (

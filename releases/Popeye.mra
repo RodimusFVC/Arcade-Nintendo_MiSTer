@@ -25,7 +25,7 @@
     <joystick>4-way</joystick>
     <special_controls></special_controls>
     <num_buttons>1</num_buttons>
-    <buttons names="Fire,Not Used,Not Used,Not Used,Coin,Start 1P,Start 2P,Pause,Not Used,Not Used,Not Used" default="A,B,X,Y,Select,Start,R,L"/>
+    <buttons names="Fire,-,-,-,Coin,Start 1P,Start 2P,Pause,-,-,-" default="A,Select,Start,R,L"/>
 
     <switches default="5F,3D">
         <dip name="Coinage" bits="0,3" ids="6C/1C,5C/1C,4C/1C,3C/1C,2C/1C,1C/1C,1C/2C,1C/3C,Free Play" values="8,5,9,10,13,15,14,3,0"/>
@@ -37,7 +37,7 @@
         <dip name="Cabinet" bits="15" ids="Upright,Cocktail"/>
     </switches>
 
-    <!-- Index 0: MAME regions, layout in rtl/nintendo_board.sv -->
+    <!-- Index 0: ROM -->
     <rom index="0" md5="none" zip="popeye.zip">
         <part crc="9af7c821" name="tpp2-c.7a"/>
         <part crc="c3704958" name="tpp2-c.7b"/>
@@ -59,7 +59,7 @@
         <part crc="49e1d170" name="tpp2-v.1k"/>
     </rom>
 
-    <!-- Index 1: board variant, flags, input map (see Arcade-Nintendo.sv) -->
+    <!-- Index 1: Config -->
     <rom index="1">
         <part>
             03 01 00 00 00 00 00 5F 3D FF 80 80 80 00 01 80
